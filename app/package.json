@@ -1,11 +1,23 @@
 {
   "name": "aquaeye-viz",
   "version": "0.1.0",
+  "description": "High-performance image browser with fuzzy search and virtualized grid rendering",
   "type": "module",
+  "bin": {
+    "aquaeye-viz": "./bin/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "backend/target/release/aquaeye-viz-backend*"
+  ],
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "tsc && vite build",
+    "build:backend": "cd backend && cargo build --release",
+    "preview": "vite preview",
+    "package": "npm run build && npm pack"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.10.8",
@@ -19,5 +31,16 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.6.3",
     "vite": "^6.0.3"
-  }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "image-viewer",
+    "image-browser",
+    "fuzzy-search",
+    "thumbnail-viewer",
+    "rust",
+    "react"
+  ]
 }

@@ -13,7 +13,10 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use thumbnail::{get_file_mtime, ThumbnailCache};
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::ServeDir,
+};
 use walkdir::WalkDir;
 
 #[derive(Clone)]
@@ -261,7 +264,19 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
-    let app = Router::new()
+    // Determine static file directory (for production, it's relative to the binary)
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(|p| p.to_path_buf()));
+
+    let static_dir = exe_dir
+        .as_ref()
+        .map(|dir| dir.join("../dist"))
+        .and_then(|path| path.canonicalize().ok())
+        .or_else(|| PathBuf::from("dist").canonicalize().ok())
+        .or_else(|| PathBuf::from("../dist").canonicalize().ok());
+
+    let mut app = Router::new()
         .route("/api/initial", get(get_initial_data))
         .route("/api/folders", get(list_folders))
         .route("/api/scan", post(scan_folder))
@@ -269,6 +284,19 @@ async fn main() {
         .route("/api/image/*path", get(serve_image))
         .with_state(state)
         .layer(cors);
+
+    // Serve static files if dist directory exists
+    if let Some(ref dir) = static_dir {
+        if dir.exists() {
+            println!("📦 Serving static files from: {}", dir.display());
+            app = app.fallback_service(ServeDir::new(dir));
+        } else {
+            println!("⚠️  Static files directory not found: {}", dir.display());
+            println!("   API-only mode (expecting separate frontend server)");
+        }
+    } else {
+        println!("ℹ️  Running in development mode (API-only)");
+    }
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await

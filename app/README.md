@@ -11,54 +11,55 @@ A high-performance image browser with fzf-like fuzzy search, virtualized grid re
 - **Filename Parsing**: Automatic extraction of metadata from filenames (dates, subjects, series, frame numbers)
 - **Multi-view Modes**: Grid, Detail (with zoom/pan), and Compare modes
 - **Multi-selection**: Select multiple images for comparison
-- **Browser-based**: Access through Chrome/Firefox - no X11 or desktop environment needed!
+- **Browser-based**: Access through Chrome/Firefox - no desktop environment needed!
 
 ## Architecture
 
-- **Frontend**: React + Vite (runs on http://localhost:5173)
-- **Backend**: Rust + Axum web server (runs on http://localhost:3000)
-- **Communication**: REST API with fetch() instead of desktop IPC
-
-## Prerequisites
-
-- **Rust** (1.70+): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** (20+): `nvm install 20` or download from [nodejs.org](https://nodejs.org)
-
-No system GUI libraries required! Works great on headless servers.
-
-## Installation
-
-```bash
-# Install Node dependencies
-npm install
-
-# Rust dependencies are downloaded automatically when you run the backend
-```
+- **Frontend**: React + Vite → builds to static files
+- **Backend**: Rust + Axum web server → serves both API and static frontend
+- **Communication**: REST API
+- **Distribution**: Single Rust binary + static files, packaged via npm
 
 ## Quick Start
 
-### Option 1: Using the start script (recommended)
+### Production Use (via npm package)
 
 ```bash
-./start.sh
+# Install the package (when published)
+npm install -g aquaeye-viz
+
+# Run it
+aquaeye-viz /path/to/images
 ```
 
-This starts both backend and frontend automatically. Open **http://localhost:5173** in your browser.
+Then open **http://localhost:3000** in your browser.
 
-### Option 2: Manual start
+### Development
 
-**Terminal 1 - Backend:**
+**Prerequisites:**
+- **Rust** (1.70+): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- **Node.js** (20+): `nvm install 20` or download from [nodejs.org](https://nodejs.org)
+
+**Setup:**
 ```bash
-cd backend
-cargo run
+# Install dependencies
+npm install
 ```
 
-**Terminal 2 - Frontend:**
+**Run development servers:**
 ```bash
+# Option 1: Using the start script (runs both backend and frontend)
+./start.sh /path/to/images
+
+# Option 2: Manual start
+# Terminal 1 - Backend:
+cd backend && cargo run -- /path/to/images
+
+# Terminal 2 - Frontend:
 npm run dev
 ```
 
-Then open your browser to: **http://localhost:5173**
+Development mode runs frontend on **http://localhost:5173** with hot reload.
 
 ## Usage
 
@@ -118,7 +119,7 @@ Example: `2025-07-23-sasamat-delta3-0028.png`
 
 - **src/store.ts**: Zustand state management
 - **src/search.ts**: Fuzzy search implementation
-- **src/commands.ts**: HTTP API client (replaces Tauri IPC)
+- **src/commands.ts**: HTTP API client
 - **src/components/Grid.tsx**: Virtualized grid with TanStack Virtual
 - **src/components/Viewer.tsx**: Detail view with zoom/pan
 - **src/components/Compare.tsx**: Multi-image comparison
@@ -144,20 +145,58 @@ cd backend
 cargo run  # Auto-recompile with cargo watch
 ```
 
-## Build for Production
+## Building for Distribution
+
+Build both frontend and backend for production:
 
 ```bash
-# Frontend
-npm run build  # Creates optimized build in dist/
+# Build everything
+npm run build
 
-# Backend
-cd backend
-cargo build --release  # Creates binary in target/release/
+# Or use the build script
+./scripts/build-all.sh
 ```
 
-## Migration from Tauri
+This creates:
+- **Frontend**: Optimized static files in `dist/`
+- **Backend**: Release binary in `backend/target/release/aquaeye-viz-backend`
 
-This project was originally built with Tauri (desktop app) but has been converted to a web app for better accessibility and easier deployment. The UI and functionality remain identical.
+The backend automatically serves the static frontend files when running in production.
+
+### Package for npm
+
+```bash
+# Create npm package
+npm pack
+
+# This creates: aquaeye-viz-0.1.0.tgz
+# Install locally to test:
+npm install -g ./aquaeye-viz-0.1.0.tgz
+aquaeye-viz /path/to/images
+```
+
+The package includes:
+- Compiled Rust binary
+- Built frontend (dist/)
+- CLI wrapper (bin/cli.js)
+
+### Cross-platform Builds
+
+For distributing to different platforms, build the Rust binary on each target platform:
+
+```bash
+# macOS (Intel)
+cargo build --release --target x86_64-apple-darwin
+
+# macOS (Apple Silicon)
+cargo build --release --target aarch64-apple-darwin
+
+# Linux
+cargo build --release --target x86_64-unknown-linux-gnu
+
+# Windows
+cargo build --release --target x86_64-pc-windows-msvc
+```
 
 ## License
 

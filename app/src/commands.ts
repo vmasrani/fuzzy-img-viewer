@@ -18,7 +18,6 @@ export async function getInitialData(): Promise<InitialData> {
 }
 
 export async function selectFolder(): Promise<string> {
-  // For web app, we'll prompt user to enter a folder path
   const path = prompt("Enter folder path to scan:");
   if (!path) {
     throw new Error("No folder path provided");

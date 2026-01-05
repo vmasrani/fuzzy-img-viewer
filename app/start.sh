@@ -49,7 +49,7 @@ FRONTEND_PID=$!
 echo ""
 echo "✅ AquaEye Viz is running!"
 echo "   Backend:  http://localhost:3000"
-echo "   Frontend: http://localhost:1420"
+echo "   Frontend: http://localhost:5173"
 echo "Press Ctrl+C to stop both servers"
 
 # Wait for user interrupt

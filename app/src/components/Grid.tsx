@@ -49,6 +49,8 @@ export function Grid() {
     thumbnailMap,
     setThumbnailPath,
     searchSelectedIds,
+    containerWidth,
+    setContainerWidth,
   } = useStore();
 
   // If there are search selections, only show those images
@@ -64,8 +66,20 @@ export function Grid() {
 
   const parentRef = useRef<HTMLDivElement>(null);
 
-  const containerWidth = parentRef.current?.clientWidth || window.innerWidth;
-  const itemsPerRow = Math.floor((containerWidth - 12) / (thumbSize + 12)); // account for padding and gap
+  // Keep containerWidth in sync via ResizeObserver
+  useEffect(() => {
+    if (!parentRef.current) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width ?? window.innerWidth;
+      setContainerWidth(width);
+    });
+
+    observer.observe(parentRef.current);
+    return () => observer.disconnect();
+  }, [setContainerWidth]);
+
+  const itemsPerRow = Math.floor(containerWidth / (thumbSize + 12));
 
   const rowCount = Math.ceil(displayImages.length / itemsPerRow);
 
@@ -100,7 +114,15 @@ export function Grid() {
         });
       });
     }
-  }, [rowVirtualizer.getVirtualItems(), thumbSize, displayImages]);
+  }, [
+    rowVirtualizer.range?.startIndex,
+    rowVirtualizer.range?.endIndex,
+    thumbSize,
+    displayImages,
+    itemsPerRow,
+    thumbnailMap,
+    setThumbnailPath,
+  ]);
 
   if (displayImages.length === 0) {
     return (

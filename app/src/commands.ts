@@ -7,11 +7,26 @@ export interface InitialData {
   images: ImageRecord[] | null;
 }
 
+export interface FolderListResponse {
+  folders: string[];
+}
+
 export async function getInitialData(): Promise<InitialData> {
   const response = await fetch(`${API_BASE}/initial`);
 
   if (!response.ok) {
     throw new Error(`Failed to get initial data: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function listFolders(path: string = ""): Promise<FolderListResponse> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : "";
+  const response = await fetch(`${API_BASE}/folders${params}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to list folders: ${response.statusText}`);
   }
 
   return response.json();

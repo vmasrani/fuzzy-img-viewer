@@ -1,15 +1,17 @@
 {
-  "name": "aquaeye-viz",
-  "version": "0.1.0",
+  "name": "@vmasrani/fuzzy-img-viewer",
+  "version": "0.1.1",
   "description": "High-performance image browser with fuzzy search and virtualized grid rendering",
+  "author": "vmasrani",
+  "license": "MIT",
   "type": "module",
   "bin": {
-    "aquaeye-viz": "./bin/cli.js"
+    "fuzzy-img-viewer": "./bin/cli.js"
   },
   "files": [
     "dist",
     "bin",
-    "backend/target/release/aquaeye-viz-backend*"
+    "backend/target/release/fuzzy-img-viewer-backend*"
   ],
   "scripts": {
     "dev": "vite",
@@ -17,10 +19,12 @@
     "build:frontend": "tsc && vite build",
     "build:backend": "cd backend && cargo build --release",
     "preview": "vite preview",
-    "package": "npm run build && npm pack"
+    "package": "npm run build && npm pack",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@tanstack/react-virtual": "^3.10.8",
+    "fuzzysort": "3.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.5"

@@ -2,12 +2,14 @@ mod parser;
 mod thumbnail;
 
 use axum::{
+    body::Body,
     extract::{Path as AxumPath, Query, State},
     http::{header, StatusCode},
-    response::{IntoResponse, Json, Response},
+    response::{Json, Response},
     routing::{get, post},
     Router,
 };
+use tokio_util::io::ReaderStream;
 use parser::{parse_filename, ImageMetadata};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -17,7 +19,7 @@ use tower_http::{
     cors::{Any, CorsLayer},
     services::ServeDir,
 };
-use walkdir::WalkDir;
+use ignore::WalkBuilder;
 
 #[derive(Clone)]
 struct AppState {
@@ -31,6 +33,7 @@ pub struct ImageRecord {
     pub id: String,
     pub path: String,
     pub filename: String,
+    pub parent_path: String,
     pub metadata: ImageMetadata,
     pub mtime: u64,
     pub size_bytes: u64,
@@ -95,6 +98,9 @@ async fn list_folders(Query(params): Query<std::collections::HashMap<String, Str
     Json(FolderListResponse { folders })
 }
 
+const MAX_SCAN_DEPTH: usize = 10;
+const MAX_IMAGE_COUNT: usize = 50_000;
+
 // Helper function to scan a folder and return image records
 fn scan_folder_path(path: &Path) -> Result<Vec<ImageRecord>, String> {
     if !path.exists() || !path.is_dir() {
@@ -103,11 +109,19 @@ fn scan_folder_path(path: &Path) -> Result<Vec<ImageRecord>, String> {
 
     let mut records = Vec::new();
 
-    for entry in WalkDir::new(path)
-        .max_depth(1)
-        .into_iter()
-        .filter_map(|e| e.ok())
-    {
+    let walker = WalkBuilder::new(path)
+        .max_depth(Some(MAX_SCAN_DEPTH))
+        .follow_links(false)
+        .git_ignore(false)
+        .hidden(false)
+        .build();
+
+    for entry in walker.filter_map(|e| e.ok()) {
+        if records.len() >= MAX_IMAGE_COUNT {
+            eprintln!("⚠️  Reached maximum image count ({}), stopping scan", MAX_IMAGE_COUNT);
+            break;
+        }
+
         let entry_path = entry.path();
         if !entry_path.is_file() {
             continue;
@@ -118,7 +132,7 @@ fn scan_folder_path(path: &Path) -> Result<Vec<ImageRecord>, String> {
             .and_then(|s| s.to_str())
             .unwrap_or("");
 
-        if !matches!(extension.to_lowercase().as_str(), "png" | "jpg" | "jpeg") {
+        if !matches!(extension.to_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif") {
             continue;
         }
 
@@ -127,6 +141,11 @@ fn scan_folder_path(path: &Path) -> Result<Vec<ImageRecord>, String> {
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_string();
+
+        let parent_path = entry_path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
 
         let metadata = parse_filename(&filename);
 
@@ -158,6 +177,7 @@ fn scan_folder_path(path: &Path) -> Result<Vec<ImageRecord>, String> {
             id,
             path: entry_path.to_string_lossy().to_string(),
             filename,
+            parent_path,
             metadata,
             mtime,
             size_bytes,
@@ -170,9 +190,13 @@ fn scan_folder_path(path: &Path) -> Result<Vec<ImageRecord>, String> {
 
 // Scan a folder for images
 async fn scan_folder(Json(req): Json<ScanFolderRequest>) -> Result<Json<Vec<ImageRecord>>, StatusCode> {
-    let path = Path::new(&req.folder_path);
+    let path = PathBuf::from(&req.folder_path);
 
-    match scan_folder_path(path) {
+    let result = tokio::task::spawn_blocking(move || scan_folder_path(&path))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match result {
         Ok(records) => Ok(Json(records)),
         Err(_) => Err(StatusCode::BAD_REQUEST),
     }
@@ -193,25 +217,30 @@ async fn ensure_thumbnails(
     Json(results)
 }
 
-// Serve individual images by path
+// Serve individual images by path (streamed for memory efficiency)
 async fn serve_image(AxumPath(path): AxumPath<String>) -> Result<Response, StatusCode> {
-    // Decode the path (it comes URL-encoded)
     let decoded_path = urlencoding::decode(&path).map_err(|_| StatusCode::BAD_REQUEST)?;
-    let file_path = Path::new(decoded_path.as_ref());
+    let file_path = PathBuf::from(decoded_path.as_ref());
 
     if !file_path.exists() || !file_path.is_file() {
         return Err(StatusCode::NOT_FOUND);
     }
 
-    let content = tokio::fs::read(file_path)
+    let file = tokio::fs::File::open(&file_path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let mime_type = mime_guess::from_path(file_path)
+    let stream = ReaderStream::new(file);
+    let body = Body::from_stream(stream);
+
+    let mime_type = mime_guess::from_path(&file_path)
         .first_or_octet_stream()
         .to_string();
 
-    Ok(([(header::CONTENT_TYPE, mime_type)], content).into_response())
+    Ok(Response::builder()
+        .header(header::CONTENT_TYPE, mime_type)
+        .body(body)
+        .unwrap())
 }
 
 #[tokio::main]
@@ -248,7 +277,7 @@ async fn main() {
     // Create thumbnail cache directory
     let cache_dir = dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from(".cache"))
-        .join("aquaeye-viz")
+        .join("fuzzy-img-viewer")
         .join("thumbs");
 
     let thumbnail_cache = ThumbnailCache::new(cache_dir).expect("Failed to create thumbnail cache");
@@ -271,7 +300,7 @@ async fn main() {
 
     let static_dir = exe_dir
         .as_ref()
-        .map(|dir| dir.join("../dist"))
+        .map(|dir| dir.join("../../../dist"))
         .and_then(|path| path.canonicalize().ok())
         .or_else(|| PathBuf::from("dist").canonicalize().ok())
         .or_else(|| PathBuf::from("../dist").canonicalize().ok());
@@ -302,7 +331,7 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("🚀 AquaEye Viz Backend running on http://127.0.0.1:3000");
+    println!("🚀 Fuzzy Image Viewer running on http://127.0.0.1:3000");
 
     axum::serve(listener, app).await.unwrap();
 }

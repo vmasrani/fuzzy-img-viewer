@@ -11,7 +11,7 @@ const __dirname = dirname(__filename);
 
 // Determine binary name based on platform
 const isWindows = platform() === 'win32';
-const binaryName = isWindows ? 'aquaeye-viz-backend.exe' : 'aquaeye-viz-backend';
+const binaryName = isWindows ? 'fuzzy-img-viewer-backend.exe' : 'fuzzy-img-viewer-backend';
 
 // Find the binary path (relative to package root)
 const packageRoot = join(__dirname, '..');
@@ -36,13 +36,13 @@ if (!existsSync(distPath)) {
 const folderPath = process.argv[2];
 
 if (!folderPath) {
-  console.error('Usage: aquaeye-viz <folder_path>');
-  console.error('Example: aquaeye-viz /path/to/your/images');
+  console.error('Usage: fuzzy-img-viewer <folder_path>');
+  console.error('Example: fuzzy-img-viewer /path/to/your/images');
   process.exit(1);
 }
 
 console.log('📁 Image folder:', folderPath);
-console.log('🚀 Starting AquaEye Viz backend...');
+console.log('🚀 Starting Fuzzy Image Viewer backend...');
 
 // Start the backend server
 const backend = spawn(binaryPath, [folderPath], {
@@ -74,7 +74,7 @@ backend.on('exit', (code) => {
 
 // Wait a moment then print instructions
 setTimeout(() => {
-  console.log('\n✅ AquaEye Viz is running!');
+  console.log('\n✅ Fuzzy Image Viewer is running!');
   console.log('   Open in browser: http://localhost:3000');
   console.log('   Press Ctrl+C to stop\n');
 }, 2000);

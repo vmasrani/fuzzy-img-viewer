@@ -12,6 +12,7 @@ export interface ImageRecord {
   id: string;
   path: string;
   filename: string;
+  parent_path: string;
   metadata: ImageMetadata;
   mtime: number;
   size_bytes: number;

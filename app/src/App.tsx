@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useStore } from "./store";
-import { selectFolder, scanFolder, getInitialData } from "./commands";
+import { scanFolder, getInitialData } from "./commands";
 import { SearchBar } from "./components/SearchBar";
 import { Grid } from "./components/Grid";
 import { Viewer } from "./components/Viewer";
 import { Compare } from "./components/Compare";
+import { FolderBrowser } from "./components/FolderBrowser";
 
 function KeybindingsHelp() {
   return (
@@ -57,6 +58,7 @@ export default function App() {
   } = useStore();
 
   const [isLoading, setIsLoading] = useState(true);
+  const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
   // Fetch initial data on mount
   useEffect(() => {
@@ -162,9 +164,9 @@ export default function App() {
     setThumbSize,
   ]);
 
-  const handleSelectFolder = async () => {
+  const handleSelectFolder = async (path: string) => {
+    setShowFolderBrowser(false);
     try {
-      const path = await selectFolder();
       setFolderPath(path);
       const images = await scanFolder(path);
       setImages(images);
@@ -187,13 +189,19 @@ export default function App() {
   if (!folderPath) {
     return (
       <div className="app">
+        {showFolderBrowser && (
+          <FolderBrowser
+            onSelect={handleSelectFolder}
+            onCancel={() => setShowFolderBrowser(false)}
+          />
+        )}
         <div className="empty-state">
           <h2>AquaEye Viz</h2>
           <p>Image browser with fzf-like search</p>
           <p style={{ marginTop: "16px", fontSize: "14px", color: "#999" }}>
             No folder path provided via command line
           </p>
-          <button onClick={handleSelectFolder}>Select Folder Manually</button>
+          <button onClick={() => setShowFolderBrowser(true)}>Select Folder</button>
           <div style={{ marginTop: "32px", fontSize: "12px", color: "#666" }}>
             <p>Keyboard shortcuts:</p>
             <p>/ - Search • ↑↓←→ - Navigate • Enter - View</p>

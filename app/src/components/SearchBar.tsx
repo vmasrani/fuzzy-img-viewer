@@ -1,6 +1,6 @@
 import { useStore } from "../store";
 import { useState, useRef, useEffect } from "react";
-import { highlightMatches } from "../search";
+import { getHighlightSegments } from "../search";
 
 export function SearchBar() {
   const {
@@ -171,11 +171,11 @@ export function SearchBar() {
                       {isChecked ? "✓" : " "}
                     </span>
                     <div className="search-dropdown-text">
-                      <span
-                        dangerouslySetInnerHTML={{
-                          __html: highlightMatches(image.filename, query),
-                        }}
-                      />
+                      <span>
+                        {getHighlightSegments(image.filename, query).map((seg, i) =>
+                          seg.isMatch ? <mark key={i}>{seg.text}</mark> : <span key={i}>{seg.text}</span>
+                        )}
+                      </span>
                       <span className="search-dropdown-path">{image.parent_path}</span>
                     </div>
                   </div>

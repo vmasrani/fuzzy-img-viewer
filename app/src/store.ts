@@ -19,6 +19,7 @@ interface AppStore {
   viewMode: ViewMode;
   thumbnailMap: Map<string, string>;
   recentlyViewed: RecentlyViewedItem[];
+  containerWidth: number;
 
   setFolderPath: (path: string | null) => void;
   setImages: (images: ImageRecord[]) => void;
@@ -34,6 +35,7 @@ interface AppStore {
   clearSearchSelection: () => void;
   moveActive: (direction: "up" | "down" | "left" | "right") => void;
   markAsViewed: (id: string) => void;
+  setContainerWidth: (width: number) => void;
 }
 
 // Load recently viewed from localStorage
@@ -104,6 +106,7 @@ export const useStore = create<AppStore>((set, get) => ({
   viewMode: "grid",
   thumbnailMap: new Map(),
   recentlyViewed: loadRecentlyViewed(),
+  containerWidth: window.innerWidth - 24,
 
   setFolderPath: (path) => set({ folderPath: path }),
 
@@ -174,8 +177,10 @@ export const useStore = create<AppStore>((set, get) => ({
 
   clearSearchSelection: () => set({ searchSelectedIds: new Set() }),
 
+  setContainerWidth: (width) => set({ containerWidth: width }),
+
   moveActive: (direction) => {
-    const { filteredImages, activeId, thumbSize } = get();
+    const { filteredImages, activeId, thumbSize, containerWidth } = get();
     if (filteredImages.length === 0) return;
 
     const currentIndex = filteredImages.findIndex((img) => img.id === activeId);
@@ -184,7 +189,6 @@ export const useStore = create<AppStore>((set, get) => ({
       return;
     }
 
-    const containerWidth = window.innerWidth - 24;
     const itemsPerRow = Math.floor(containerWidth / (thumbSize + 12));
 
     let newIndex = currentIndex;

@@ -1,0 +1,40 @@
+# PNG folder and zip files (as specified)
+pngs/
+*.zip
+app.zip
+
+# Claude development artifacts
+.claude/
+
+# Node/React frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+dist-ssr/
+*.local
+
+# Rust backend
+target/
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# OS
+Thumbs.db

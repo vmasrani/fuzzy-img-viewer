@@ -1,71 +1,31 @@
-# AquaEye Viz - Web App
+# Fuzzy Image Viewer
 
-A high-performance image browser with fzf-like fuzzy search, virtualized grid rendering, and keyboard-first navigation. Now accessible through your browser!
+High-performance image browser with fuzzy search and virtualized grid rendering. Accessible through your browser with a single command.
 
 ## Features
 
-- **fzf-like Search**: Instant, incremental fuzzy search with match highlighting
-- **Virtualized Grid**: Smoothly browse thousands of images with TanStack Virtual
-- **Keyboard Navigation**: Full keyboard control for fast workflow
-- **Smart Thumbnail Caching**: Fast thumbnail generation with SHA2-based caching
-- **Filename Parsing**: Automatic extraction of metadata from filenames (dates, subjects, series, frame numbers)
+- **Fuzzy Search**: Lightning-fast fuzzy search across all images using fuzzysort with match highlighting
+- **Recursive Scanning**: Automatically scans subdirectories for images (configurable depth)
+- **Virtual Scrolling**: Smooth performance with thousands of images using TanStack Virtual
+- **Thumbnail Generation**: Automatic thumbnail caching with SHA2-based hashing for fast loading
+- **Multi-format Support**: PNG, JPG, JPEG, WebP, GIF
 - **Multi-view Modes**: Grid, Detail (with zoom/pan), and Compare modes
-- **Multi-selection**: Select multiple images for comparison
-- **Browser-based**: Access through Chrome/Firefox - no desktop environment needed!
+- **Keyboard-first Navigation**: Full keyboard control for fast workflow
+- **Cross-platform**: Works on macOS (Intel/ARM), Linux (x64/ARM64), and Windows
 
-## Architecture
-
-- **Frontend**: React + Vite → builds to static files
-- **Backend**: Rust + Axum web server → serves both API and static frontend
-- **Communication**: REST API
-- **Distribution**: Single Rust binary + static files, packaged via npm
-
-## Quick Start
-
-### Production Use (via npm package)
+## Installation
 
 ```bash
-# Install the package (when published)
-npm install -g aquaeye-viz
-
-# Run it
-aquaeye-viz /path/to/images
+npm install -g @vmasrani/fuzzy-img-viewer
 ```
-
-Then open **http://localhost:3000** in your browser.
-
-### Development
-
-**Prerequisites:**
-- **Rust** (1.70+): `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** (20+): `nvm install 20` or download from [nodejs.org](https://nodejs.org)
-
-**Setup:**
-```bash
-# Install dependencies
-npm install
-```
-
-**Run development servers:**
-```bash
-# Option 1: Using the start script (runs both backend and frontend)
-./start.sh /path/to/images
-
-# Option 2: Manual start
-# Terminal 1 - Backend:
-cd backend && cargo run -- /path/to/images
-
-# Terminal 2 - Frontend:
-npm run dev
-```
-
-Development mode runs frontend on **http://localhost:5173** with hot reload.
 
 ## Usage
 
-1. Click "Select Folder" button
-2. Enter the **full path** to a folder containing images (e.g., `/home/user/Pictures`)
-3. Use keyboard shortcuts to navigate
+```bash
+fuzzy-img-viewer /path/to/your/images
+```
+
+The viewer will start a local web server and automatically open in your browser at http://localhost:3000
 
 ### Keyboard Shortcuts
 
@@ -86,116 +46,128 @@ Development mode runs frontend on **http://localhost:5173** with hot reload.
 2. **Detail View**: View full-resolution image with zoom/pan (mouse wheel to zoom, drag to pan)
 3. **Compare View**: View multiple selected images side-by-side
 
-### Filename Parsing
+## Architecture
 
-The app automatically parses filenames to extract metadata:
+This package uses platform-specific binaries for cross-platform compatibility:
 
-- **Date**: ISO format at start (e.g., `2025-07-23-...`)
-- **Subject**: Identified keywords (e.g., `sasamat`, `lake`)
-- **Series**: Patterns like `delta3`, `series-01`
-- **Numbers**: Extracted as `a`, `b`, `frame` values for filtering
+- **Frontend**: React + Vite → static files served by the backend
+- **Backend**: Rust + Axum web server → REST API + static file serving
+- **Distribution**: Main npm package + platform-specific binary packages
+- **Installation**: Automatically selects and copies the correct binary for your platform
 
-Example: `2025-07-23-sasamat-delta3-0028.png`
-- Date: 2025-07-23
-- Subject: sasamat
-- Series: delta3
-- Frame: 0028
+Platform packages:
+- `@vmasrani/fuzzy-img-viewer-darwin-arm64` (macOS Apple Silicon)
+- `@vmasrani/fuzzy-img-viewer-darwin-x64` (macOS Intel)
+- `@vmasrani/fuzzy-img-viewer-linux-x64` (Linux x64)
+- `@vmasrani/fuzzy-img-viewer-linux-arm64` (Linux ARM64)
+- `@vmasrani/fuzzy-img-viewer-win32-x64` (Windows x64)
 
-## Architecture Details
+## Development
 
-### Backend (Rust/Axum)
+### Prerequisites
 
-- **backend/src/parser.rs**: Filename parsing and metadata extraction
-- **backend/src/thumbnail.rs**: Thumbnail generation and caching with SHA2 hashing
-- **backend/src/main.rs**: Axum web server with REST API endpoints
+- **Node.js** 18+
+- **Rust** 1.70+: `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
+- (Optional) **cross**: `cargo install cross` for cross-compilation
 
-**API Endpoints:**
-- `POST /api/scan` - Scan folder for images
-- `POST /api/thumbnails` - Generate thumbnails
-- `GET /api/image/*path` - Serve image by path
-- `GET /api/folders?path=...` - List folders
+### Setup
 
-### Frontend (React)
+```bash
+cd app
+npm install
+```
 
-- **src/store.ts**: Zustand state management
-- **src/search.ts**: Fuzzy search implementation
-- **src/commands.ts**: HTTP API client
-- **src/components/Grid.tsx**: Virtualized grid with TanStack Virtual
-- **src/components/Viewer.tsx**: Detail view with zoom/pan
-- **src/components/Compare.tsx**: Multi-image comparison
+### Development Mode
+
+```bash
+# Terminal 1: Start backend with a folder path
+cargo run --manifest-path=backend/Cargo.toml -- /path/to/images
+
+# Terminal 2: Start frontend dev server
+npm run dev
+```
+
+Visit http://localhost:5173 (frontend dev server with hot reload)
+
+### Building
+
+```bash
+# Build frontend only
+npm run build
+
+# Build for your current platform
+cd backend && cargo build --release
+
+# Build for all platforms (requires cross-compilation setup)
+./scripts/build-binaries.sh
+
+# Build just for Linux (most common for deployment)
+./scripts/build-linux.sh
+```
+
+### Testing Locally
+
+```bash
+# Test the install process
+./scripts/test-install.sh
+
+# Test with a local package
+npm run build
+npm pack
+npm install -g vmasrani-fuzzy-img-viewer-0.1.1.tgz
+fuzzy-img-viewer /path/to/images
+```
+
+## Publishing
+
+See [PUBLISHING.md](./PUBLISHING.md) for detailed publishing instructions.
+
+### Quick Publish Workflow
+
+```bash
+# 1. Bump version across all packages
+./scripts/bump-version.sh 0.1.2
+
+# 2. Commit version bump
+git add -A && git commit -m "Bump version to 0.1.2"
+
+# 3. Build Linux binary (most important for servers)
+./scripts/build-linux.sh
+
+# 4. Copy your macOS binary
+cp backend/target/release/fuzzy-img-viewer-backend npm/darwin-arm64/
+
+# 5. Build frontend
+npm run build
+
+# 6. Publish all packages
+npm login
+./scripts/publish-all.sh
+```
 
 ## Performance
 
 - Thumbnails are generated lazily (only for visible items)
 - Thumbnails are cached using SHA256(path + mtime + size) as key
 - Grid virtualization ensures smooth scrolling with 10k+ images
-- Search is debounced and optimized for large datasets
 - Parallel thumbnail generation with rayon
+- Fuzzy search optimized with fuzzysort prepared keys
 
-## Development
+## Troubleshooting
 
-**Frontend** (React + TypeScript):
+### Binary not found error
+
+If you see "Backend binary not found" after installation, this usually means:
+1. Your platform isn't supported (check `node -p "process.platform + '-' + process.arch"`)
+2. The platform package failed to install (check npm logs)
+3. The postinstall script failed (try running `node install.js` manually)
+
+### Cross-compilation issues
+
+For Linux builds on macOS, use `cross`:
 ```bash
-npm run dev  # Hot reload enabled
-```
-
-**Backend** (Rust):
-```bash
-cd backend
-cargo run  # Auto-recompile with cargo watch
-```
-
-## Building for Distribution
-
-Build both frontend and backend for production:
-
-```bash
-# Build everything
-npm run build
-
-# Or use the build script
-./scripts/build-all.sh
-```
-
-This creates:
-- **Frontend**: Optimized static files in `dist/`
-- **Backend**: Release binary in `backend/target/release/aquaeye-viz-backend`
-
-The backend automatically serves the static frontend files when running in production.
-
-### Package for npm
-
-```bash
-# Create npm package
-npm pack
-
-# This creates: aquaeye-viz-0.1.0.tgz
-# Install locally to test:
-npm install -g ./aquaeye-viz-0.1.0.tgz
-aquaeye-viz /path/to/images
-```
-
-The package includes:
-- Compiled Rust binary
-- Built frontend (dist/)
-- CLI wrapper (bin/cli.js)
-
-### Cross-platform Builds
-
-For distributing to different platforms, build the Rust binary on each target platform:
-
-```bash
-# macOS (Intel)
-cargo build --release --target x86_64-apple-darwin
-
-# macOS (Apple Silicon)
-cargo build --release --target aarch64-apple-darwin
-
-# Linux
-cargo build --release --target x86_64-unknown-linux-gnu
-
-# Windows
-cargo build --release --target x86_64-pc-windows-msvc
+cargo install cross
+./scripts/build-linux.sh
 ```
 
 ## License

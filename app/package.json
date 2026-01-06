@@ -10,15 +10,15 @@
   },
   "files": [
     "dist",
-    "bin",
-    "backend/target/release/fuzzy-img-viewer-backend*"
+    "bin/cli.js",
+    "install.js"
   ],
   "scripts": {
     "dev": "vite",
-    "build": "npm run build:frontend && npm run build:backend",
+    "build": "npm run build:frontend",
     "build:frontend": "tsc && vite build",
-    "build:backend": "cd backend && cargo build --release",
     "preview": "vite preview",
+    "postinstall": "node install.js",
     "package": "npm run build && npm pack",
     "prepublishOnly": "npm run build"
   },
@@ -28,6 +28,13 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^4.5.5"
+  },
+  "optionalDependencies": {
+    "@vmasrani/fuzzy-img-viewer-darwin-arm64": "0.1.1",
+    "@vmasrani/fuzzy-img-viewer-darwin-x64": "0.1.1",
+    "@vmasrani/fuzzy-img-viewer-linux-x64": "0.1.1",
+    "@vmasrani/fuzzy-img-viewer-linux-arm64": "0.1.1",
+    "@vmasrani/fuzzy-img-viewer-win32-x64": "0.1.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

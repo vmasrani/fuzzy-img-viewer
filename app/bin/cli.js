@@ -13,9 +13,8 @@ const __dirname = dirname(__filename);
 const isWindows = platform() === 'win32';
 const binaryName = isWindows ? 'fuzzy-img-viewer-backend.exe' : 'fuzzy-img-viewer-backend';
 
-// Find the binary path (relative to package root)
-const packageRoot = join(__dirname, '..');
-const binaryPath = join(packageRoot, 'backend', 'target', 'release', binaryName);
+// Find the binary path (installed by postinstall script from platform package)
+const binaryPath = join(__dirname, binaryName);
 
 // Check if binary exists
 if (!existsSync(binaryPath)) {

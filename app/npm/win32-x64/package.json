@@ -1,0 +1,16 @@
+{
+  "name": "@vmasrani/fuzzy-img-viewer-win32-x64",
+  "version": "0.1.1",
+  "description": "fuzzy-img-viewer binary for Windows x64",
+  "author": "vmasrani",
+  "license": "MIT",
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "files": [
+    "fuzzy-img-viewer-backend.exe"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vmasrani/fuzzy-img-viewer.git"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@vmasrani/fuzzy-img-viewer-darwin-x64",
+  "version": "0.1.1",
+  "description": "fuzzy-img-viewer binary for macOS x64",
+  "author": "vmasrani",
+  "license": "MIT",
+  "os": ["darwin"],
+  "cpu": ["x64"],
+  "files": [
+    "fuzzy-img-viewer-backend"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vmasrani/fuzzy-img-viewer.git"
+  }
+}

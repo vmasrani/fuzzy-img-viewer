@@ -1,6 +1,6 @@
 {
   "name": "@vmasrani/fuzzy-img-viewer",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "High-performance image browser with fuzzy search and virtualized grid rendering",
   "author": "vmasrani",
   "license": "MIT",
@@ -30,11 +30,11 @@
     "zustand": "^4.5.5"
   },
   "optionalDependencies": {
-    "@vmasrani/fuzzy-img-viewer-darwin-arm64": "0.1.3",
-    "@vmasrani/fuzzy-img-viewer-darwin-x64": "0.1.3",
-    "@vmasrani/fuzzy-img-viewer-linux-x64": "0.1.3",
-    "@vmasrani/fuzzy-img-viewer-linux-arm64": "0.1.3",
-    "@vmasrani/fuzzy-img-viewer-win32-x64": "0.1.3"
+    "@vmasrani/fuzzy-img-viewer-darwin-arm64": "0.1.4",
+    "@vmasrani/fuzzy-img-viewer-darwin-x64": "0.1.4",
+    "@vmasrani/fuzzy-img-viewer-linux-x64": "0.1.4",
+    "@vmasrani/fuzzy-img-viewer-linux-arm64": "0.1.4",
+    "@vmasrani/fuzzy-img-viewer-win32-x64": "0.1.4"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

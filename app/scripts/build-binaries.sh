@@ -4,19 +4,21 @@ set -e
 # Build script for creating platform-specific binaries
 # This requires Rust cross-compilation toolchains to be installed
 
-echo "🔨 Building fuzzy-img-viewer binaries for all platforms..."
+echo "🔨 Building fuzzy-img-viewer binaries..."
 
 cd "$(dirname "$0")/../backend"
 
-# Array of target platforms
-declare -A TARGETS
-TARGETS=(
-  ["darwin-arm64"]="aarch64-apple-darwin"
-  ["darwin-x64"]="x86_64-apple-darwin"
-  ["linux-x64"]="x86_64-unknown-linux-gnu"
-  ["linux-arm64"]="aarch64-unknown-linux-gnu"
-  ["win32-x64"]="x86_64-pc-windows-gnu"
-)
+# Determine which platforms to build
+# By default, only build macOS targets locally (Linux/Windows need Docker/cross)
+if [[ "${BUILD_ALL:-}" == "true" ]]; then
+  echo "📋 Building for ALL platforms (requires Docker for Linux/Windows)"
+  PLATFORMS=("darwin-arm64" "darwin-x64" "linux-x64" "linux-arm64" "win32-x64")
+  TARGETS=("aarch64-apple-darwin" "x86_64-apple-darwin" "x86_64-unknown-linux-gnu" "aarch64-unknown-linux-gnu" "x86_64-pc-windows-gnu")
+else
+  echo "📋 Building for macOS only (use BUILD_ALL=true for all platforms)"
+  PLATFORMS=("darwin-arm64" "darwin-x64")
+  TARGETS=("aarch64-apple-darwin" "x86_64-apple-darwin")
+fi
 
 # Check if cross is installed (better for cross-compilation)
 if command -v cross &> /dev/null; then
@@ -29,8 +31,9 @@ else
 fi
 
 # Build for each target
-for platform in "${!TARGETS[@]}"; do
-  target="${TARGETS[$platform]}"
+for i in "${!PLATFORMS[@]}"; do
+  platform="${PLATFORMS[$i]}"
+  target="${TARGETS[$i]}"
   echo ""
   echo "📦 Building for $platform ($target)..."
 
@@ -54,8 +57,15 @@ for platform in "${!TARGETS[@]}"; do
 done
 
 echo ""
-echo "🎉 All binaries built successfully!"
+echo "🎉 Binaries built successfully!"
 echo ""
+if [[ "${BUILD_ALL:-}" != "true" ]]; then
+  echo "💡 Note: Only macOS binaries were built"
+  echo "   To build all platforms locally: BUILD_ALL=true ./scripts/build-binaries.sh"
+  echo "   (requires Docker running for Linux/Windows targets)"
+  echo "   Or use GitHub Actions for full cross-platform builds"
+  echo ""
+fi
 echo "Next steps:"
 echo "  1. Test locally: npm run build && npm pack"
 echo "  2. Publish platform packages: cd npm/[platform] && npm publish --access public"

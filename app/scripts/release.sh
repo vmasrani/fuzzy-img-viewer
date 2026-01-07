@@ -1,28 +1,57 @@
 #!/bin/bash
 set -e
 
-# Release script - updates version and triggers automated release
-# Usage: ./scripts/release.sh 0.1.4
+# Release script - auto-bumps version and triggers automated release
+# Usage:
+#   ./scripts/release.sh        # bumps patch (0.1.6 -> 0.1.7)
+#   ./scripts/release.sh minor  # bumps minor (0.1.6 -> 0.2.0)
+#   ./scripts/release.sh major  # bumps major (0.1.6 -> 1.0.0)
+#   ./scripts/release.sh 0.2.0  # sets explicit version
 
-if [ -z "$1" ]; then
-  echo "❌ Error: Version number required"
-  echo "Usage: ./scripts/release.sh <version>"
-  echo "Example: ./scripts/release.sh 0.1.4"
-  exit 1
+cd "$(dirname "$0")/.."
+
+# Get current version from package.json
+CURRENT_VERSION=$(node -p "require('./package.json').version")
+echo "📦 Current version: $CURRENT_VERSION"
+
+# Parse current version
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_VERSION"
+
+# Determine new version
+if [ -z "$1" ] || [ "$1" = "patch" ]; then
+  NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+elif [ "$1" = "minor" ]; then
+  NEW_VERSION="$MAJOR.$((MINOR + 1)).0"
+elif [ "$1" = "major" ]; then
+  NEW_VERSION="$((MAJOR + 1)).0.0"
+else
+  # Explicit version provided
+  NEW_VERSION="$1"
 fi
 
-NEW_VERSION="$1"
-
-echo "🚀 Preparing release v$NEW_VERSION..."
+echo "🚀 Releasing v$NEW_VERSION..."
 echo ""
+
+# Check for uncommitted changes
+if [ -n "$(git status --porcelain)" ]; then
+  echo "⚠️  You have uncommitted changes. They will be included in the release."
+  read -p "Continue? (y/N) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    exit 1
+  fi
+fi
 
 # Update Cargo.toml version
 echo "📝 Updating backend/Cargo.toml..."
-cd "$(dirname "$0")/.."
-sed -i '' "s/^version = \".*\"/version = \"$NEW_VERSION\"/" backend/Cargo.toml
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s/^version = \".*\"/version = \"$NEW_VERSION\"/" backend/Cargo.toml
+else
+  sed -i "s/^version = \".*\"/version = \"$NEW_VERSION\"/" backend/Cargo.toml
+fi
 
 # Update main package.json
-echo "📝 Updating app/package.json..."
+echo "📝 Updating package.json..."
 node -e "
   const fs = require('fs');
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -49,17 +78,22 @@ for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
 done
 
 echo ""
-echo "✅ Version updated to $NEW_VERSION in all package.json files"
+echo "📦 Committing and tagging..."
+git add -A
+git commit -m "Release v$NEW_VERSION"
+git tag "v$NEW_VERSION"
+
 echo ""
-echo "📋 Next steps:"
-echo "  1. Review the changes: git diff"
-echo "  2. Commit and tag: git add . && git commit -m 'Bump version to $NEW_VERSION' && git tag v$NEW_VERSION"
-echo "  3. Push with tags: git push && git push --tags"
+echo "🚀 Pushing to origin..."
+git push
+git push --tags
+
 echo ""
-echo "🤖 After pushing the tag, GitHub Actions will automatically:"
-echo "  ✓ Build binaries for all platforms"
-echo "  ✓ Publish all npm packages"
-echo "  ✓ Create a GitHub release"
+echo "✅ Release v$NEW_VERSION triggered!"
 echo ""
-echo "Or run this all-in-one command:"
-echo "  git add . && git commit -m 'Release v$NEW_VERSION' && git tag v$NEW_VERSION && git push && git push --tags"
+echo "🤖 GitHub Actions will now:"
+echo "   • Build binaries for all platforms"
+echo "   • Publish npm packages"
+echo "   • Create GitHub release"
+echo ""
+echo "📊 Monitor: https://github.com/vmasrani/fuzzy-img-viewer/actions"

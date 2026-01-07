@@ -3,6 +3,7 @@ pngs/
 *.zip
 app.zip
 
+bin/fuzzy-img-viewer-backend
 # Claude development artifacts
 .claude/
 

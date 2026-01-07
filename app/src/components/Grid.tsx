@@ -2,6 +2,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useEffect, useRef, useMemo } from "react";
 import { useStore } from "../store";
 import { ensureThumbnails, convertFileSrc } from "../commands";
+import { buildImageGroups, sortGroupsByOrder } from "../grouping";
+import { ImageRecord } from "../types";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -39,6 +41,18 @@ function getRelativePath(fullPath: string, commonPrefix: string): string {
   return fullPath;
 }
 
+const GROUP_HEADER_HEIGHT = 72;
+const ROW_GAP = 12;
+
+type RowType = "header" | "images";
+
+interface VirtualRow {
+  type: RowType;
+  groupKey: string;
+  height: number;
+  images?: ImageRecord[];
+}
+
 export function Grid() {
   const {
     filteredImages,
@@ -51,18 +65,12 @@ export function Grid() {
     searchSelectedIds,
     containerWidth,
     setContainerWidth,
+    groupOrder,
+    setGroupOrder,
+    collapsedGroups,
+    toggleGroupCollapse,
+    setGroupCollapse,
   } = useStore();
-
-  // If there are search selections, only show those images
-  const displayImages =
-    searchSelectedIds.size > 0
-      ? filteredImages.filter((img) => searchSelectedIds.has(img.id))
-      : filteredImages;
-
-  // Compute common path prefix
-  const commonPrefix = useMemo(() => {
-    return findCommonPrefix(displayImages.map((img) => img.path));
-  }, [displayImages]);
 
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -80,34 +88,126 @@ export function Grid() {
   }, [setContainerWidth]);
 
   const itemsPerRow = Math.max(1, Math.floor(containerWidth / (thumbSize + 12)));
+  const imageRowHeight = thumbSize + 56;
 
-  const rowCount = Math.ceil(displayImages.length / itemsPerRow);
+  const baseGroups = useMemo(() => buildImageGroups(filteredImages), [filteredImages]);
+  const orderedGroups = useMemo(
+    () => sortGroupsByOrder(baseGroups, groupOrder),
+    [baseGroups, groupOrder]
+  );
+
+  const visibleGroups = useMemo(() => {
+    if (searchSelectedIds.size === 0) {
+      return orderedGroups;
+    }
+
+    return orderedGroups
+      .map((group) => ({
+        ...group,
+        images: group.images.filter((img) => searchSelectedIds.has(img.id)),
+      }))
+      .filter((group) => group.images.length > 0);
+  }, [orderedGroups, searchSelectedIds]);
+
+  const effectiveOrder = useMemo(() => {
+    if (groupOrder.length > 0) {
+      return groupOrder;
+    }
+    return orderedGroups.map((group) => group.key);
+  }, [groupOrder, orderedGroups]);
+
+  const orderIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    effectiveOrder.forEach((id, index) => map.set(id, index));
+    return map;
+  }, [effectiveOrder]);
+
+  const visibleImageCount = useMemo(
+    () => visibleGroups.reduce((total, group) => total + group.images.length, 0),
+    [visibleGroups]
+  );
+
+  const displayImages = useMemo(() => {
+    const flattened = visibleGroups.flatMap((group) =>
+      collapsedGroups.has(group.key) ? [] : group.images
+    );
+    return flattened;
+  }, [visibleGroups, collapsedGroups]);
+
+  const commonPrefix = useMemo(() => {
+    return findCommonPrefix(displayImages.map((img) => img.path));
+  }, [displayImages]);
+
+  const rows = useMemo(() => {
+    const entries: VirtualRow[] = [];
+    visibleGroups.forEach((group) => {
+      entries.push({
+        type: "header",
+        groupKey: group.key,
+        height: GROUP_HEADER_HEIGHT,
+      });
+
+      if (!collapsedGroups.has(group.key)) {
+        for (let i = 0; i < group.images.length; i += itemsPerRow) {
+          const chunk = group.images.slice(i, i + itemsPerRow);
+          entries.push({
+            type: "images",
+            groupKey: group.key,
+            height: imageRowHeight + ROW_GAP,
+            images: chunk,
+          });
+        }
+      }
+    });
+    return entries;
+  }, [visibleGroups, collapsedGroups, itemsPerRow, imageRowHeight]);
+
+  const imageToGroupKey = useMemo(() => {
+    const map = new Map<string, string>();
+    orderedGroups.forEach((group) => {
+      group.images.forEach((img) => map.set(img.id, group.key));
+    });
+    return map;
+  }, [orderedGroups]);
+
+  // Expand collapsed group if currently active image would otherwise be hidden
+  useEffect(() => {
+    if (!activeId) return;
+    const groupKey = imageToGroupKey.get(activeId);
+    if (groupKey && collapsedGroups.has(groupKey)) {
+      setGroupCollapse(groupKey, false);
+    }
+  }, [activeId, collapsedGroups, imageToGroupKey, setGroupCollapse]);
 
   const rowVirtualizer = useVirtualizer({
-    count: rowCount,
+    count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => thumbSize + 56 + 12, // image + header + gap
-    overscan: 2,
+    estimateSize: (index) => rows[index]?.height ?? imageRowHeight + ROW_GAP,
+    overscan: 4,
   });
 
   // Scroll to active item when it changes
   useEffect(() => {
-    if (!activeId || displayImages.length === 0) return;
+    if (!activeId) return;
 
-    const activeIndex = displayImages.findIndex((img) => img.id === activeId);
-    if (activeIndex === -1) return;
+    const rowIndex = rows.findIndex(
+      (row) => row.type === "images" && row.images?.some((img) => img.id === activeId)
+    );
 
-    const activeRow = Math.floor(activeIndex / itemsPerRow);
-    rowVirtualizer.scrollToIndex(activeRow, { align: "auto" });
+    if (rowIndex >= 0) {
+      rowVirtualizer.scrollToIndex(rowIndex, { align: "auto" });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeId]);
+  }, [activeId, rows]);
 
   useEffect(() => {
     const visible = rowVirtualizer.getVirtualItems();
     const visibleImages = visible.flatMap((row) => {
-      const start = row.index * itemsPerRow;
-      const end = Math.min(start + itemsPerRow, displayImages.length);
-      return displayImages.slice(start, end);
+      const rowData = rows[row.index];
+      if (!rowData || rowData.type !== "images" || !rowData.images) {
+        return [];
+      }
+      return rowData.images;
     });
 
     const toLoad = visibleImages.filter(
@@ -136,7 +236,23 @@ export function Grid() {
     setThumbnailPath,
   ]);
 
-  if (displayImages.length === 0) {
+  const moveGroup = (groupId: string, direction: "up" | "down") => {
+    const sourceOrder =
+      groupOrder.length > 0 ? groupOrder : orderedGroups.map((group) => group.key);
+    const currentIndex = sourceOrder.indexOf(groupId);
+    if (currentIndex === -1) return;
+
+    const delta = direction === "up" ? -1 : 1;
+    const nextIndex = currentIndex + delta;
+    if (nextIndex < 0 || nextIndex >= sourceOrder.length) return;
+
+    const nextOrder = [...sourceOrder];
+    const [removed] = nextOrder.splice(currentIndex, 1);
+    nextOrder.splice(nextIndex, 0, removed);
+    setGroupOrder(nextOrder);
+  };
+
+  if (visibleImageCount === 0) {
     return (
       <div className="loading">
         {searchSelectedIds.size > 0
@@ -156,9 +272,75 @@ export function Grid() {
         }}
       >
         {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-          const start = virtualRow.index * itemsPerRow;
-          const end = Math.min(start + itemsPerRow, displayImages.length);
-          const rowImages = displayImages.slice(start, end);
+          const rowData = rows[virtualRow.index];
+          if (!rowData) return null;
+
+          if (rowData.type === "header") {
+            const group = visibleGroups.find((g) => g.key === rowData.groupKey);
+            if (!group) return null;
+            const collapsed = collapsedGroups.has(group.key);
+            const orderIndex = orderIndexMap.get(group.key) ?? 0;
+            const isFirst = orderIndex === 0;
+
+            return (
+            <div
+              key={virtualRow.key}
+              className="group-header-row"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                transform: `translateY(${virtualRow.start}px)`,
+                height: `${GROUP_HEADER_HEIGHT}px`,
+              }}
+              onClick={(event) => {
+                const target = event.target as HTMLElement;
+                if (target.closest(".group-header-actions")) return;
+                toggleGroupCollapse(group.key);
+              }}
+            >
+              <button
+                className="group-collapse-button"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleGroupCollapse(group.key);
+                }}
+                aria-label={collapsed ? "Expand group" : "Collapse group"}
+              >
+                {collapsed ? "▶" : "▼"}
+              </button>
+                <div className="group-header-content">
+                  <div className="group-header-title">
+                    <div className="group-label">{group.label}</div>
+                    <div className="group-subtitle">
+                      {group.description || "Shared prefix"}
+                    </div>
+                  </div>
+                  <div className="group-count">
+                    {group.images.length}{" "}
+                    {group.images.length === 1 ? "file" : "files"}
+                  </div>
+                </div>
+                <div className="group-header-actions">
+                  <span className={`group-type-badge ${group.type}`}>
+                    {group.type === "natural" ? "Prefix" : "Folder"}
+                  </span>
+                  <div className="group-reorder">
+                    <button
+                      type="button"
+                      onClick={() => moveGroup(group.key, "up")}
+                      disabled={isFirst}
+                      aria-label="Move group up"
+                    >
+                      ↑
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
 
           return (
             <div
@@ -170,10 +352,11 @@ export function Grid() {
                 left: 0,
                 width: "100%",
                 transform: `translateY(${virtualRow.start}px)`,
-                height: `${thumbSize + 56}px`,
+                height: `${imageRowHeight}px`,
+                marginBottom: `${ROW_GAP}px`,
               }}
             >
-              {rowImages.map((image) => {
+              {rowData.images?.map((image) => {
                 const thumbPath = thumbnailMap.get(image.path);
                 const isActive = image.id === activeId;
                 const isSelected = selectedIds.has(image.id);

@@ -14,8 +14,9 @@
     "install.js"
   ],
   "scripts": {
-    "dev": "vite",
-    "build": "npm run build:frontend",
+    "dev": "node scripts/dev.js",
+    "dev:frontend": "vite",
+    "build": "npm run build:frontend && cargo build --manifest-path backend/Cargo.toml --release",
     "build:frontend": "tsc && vite build",
     "preview": "vite preview",
     "postinstall": "node install.js",

@@ -61,22 +61,33 @@ export function Viewer() {
     return null;
   }
 
+  const metadataChips = [
+    activeImage.metadata.date,
+    activeImage.metadata.subject,
+    activeImage.metadata.series,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="viewer-overlay">
-      <div className="viewer-header">
-        <div>
-          <strong>{activeImage.path}</strong>
-          <div style={{ fontSize: "12px", color: "#999", marginTop: "4px" }}>
-            {activeIndex + 1} / {filteredImages.length}
-            {activeImage.metadata.date && ` • ${activeImage.metadata.date}`}
-            {activeImage.metadata.subject &&
-              ` • ${activeImage.metadata.subject}`}
-            {activeImage.metadata.series && ` • ${activeImage.metadata.series}`}
+      <div className="viewer-chrome">
+        <div className="viewer-title">
+          <span className="viewer-filename">{activeImage.filename}</span>
+          <div className="viewer-details">
+            <span>
+              {activeIndex + 1} / {filteredImages.length}
+            </span>
+            {metadataChips.map((chip) => (
+              <span key={chip}>{chip}</span>
+            ))}
           </div>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <button onClick={() => setZoom(1)}>Reset Zoom</button>
-          <button onClick={() => setViewMode("grid")}>Close (Esc)</button>
+        <div className="viewer-controls">
+          <button className="viewer-pill secondary" onClick={() => setZoom(1)}>
+            Reset zoom
+          </button>
+          <button className="viewer-pill" onClick={() => setViewMode("grid")}>
+            Back to library
+          </button>
         </div>
       </div>
       <div
@@ -102,15 +113,21 @@ export function Viewer() {
           />
         </div>
         {activeIndex > 0 && (
-          <button className="viewer-nav prev" onClick={handlePrev}>
+          <button className="viewer-nav prev" onClick={handlePrev} aria-label="Previous image">
             ‹
           </button>
         )}
         {activeIndex < filteredImages.length - 1 && (
-          <button className="viewer-nav next" onClick={handleNext}>
+          <button className="viewer-nav next" onClick={handleNext} aria-label="Next image">
             ›
           </button>
         )}
+        <div className="viewer-bottom-bar">
+          <span className="viewer-path">{activeImage.path}</span>
+          <span className="viewer-counter">
+            {activeIndex + 1} / {filteredImages.length}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -15,6 +15,7 @@ export function SearchBar() {
     searchSelectedIds,
     setSearchSelectedIds,
     clearSearchSelection,
+    folderPath,
   } = useStore();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -138,8 +139,20 @@ export function SearchBar() {
     }
   }, [selectedIndex, isDropdownOpen]);
 
+  const folderName = folderPath ? folderPath.split("/").filter(Boolean).slice(-1)[0] : "No folder selected";
+
   return (
     <div className="search-header">
+      <div className="search-hero">
+        <div className="search-hero-copy">
+          <h1>Photo Library</h1>
+          <p>
+            {folderPath
+              ? `Browsing ${folderName} • ${images.length.toLocaleString()} captures`
+              : "Choose a folder to start exploring your captures"}
+          </p>
+        </div>
+      </div>
       <div className="search-container">
         <input
           ref={inputRef}
@@ -191,17 +204,24 @@ export function SearchBar() {
         )}
       </div>
       <div className="search-info">
-        <span>
-          {searchSelectedIds.size > 0 ? (
-            <>
-              {searchSelectedIds.size} selected • Showing {filteredImages.length} of {images.length} images
-            </>
-          ) : (
-            <>
-              Showing {filteredImages.length} of {images.length} images
-            </>
-          )}
-        </span>
+        <div className="search-info-details">
+          <span className="search-info-summary">
+            {searchSelectedIds.size > 0 ? (
+              <>
+                {searchSelectedIds.size} selected • Showing {filteredImages.length} of {images.length} images
+              </>
+            ) : (
+              <>
+                Showing {filteredImages.length} of {images.length} images
+              </>
+            )}
+          </span>
+          <div className="search-info-stats">
+            <span className="info-chip">Visible {filteredImages.length.toLocaleString()}</span>
+            <span className="info-chip">Selected {searchSelectedIds.size.toLocaleString()}</span>
+            <span className="info-chip">Thumb {thumbSize}px</span>
+          </div>
+        </div>
         <div className="toolbar">
           {searchSelectedIds.size > 0 && (
             <button onClick={() => clearSearchSelection()}>Clear</button>

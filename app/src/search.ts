@@ -49,7 +49,9 @@ export function getHighlightSegments(text: string, query: string): HighlightSegm
   const segments: HighlightSegment[] = [];
   let lastIdx = 0;
 
-  for (const idx of result.indexes) {
+  const indexes = fuzzysort.indexes(result).map((idx) => Number(idx));
+
+  for (const idx of indexes) {
     if (idx > lastIdx) {
       segments.push({ text: text.slice(lastIdx, idx), isMatch: false });
     }

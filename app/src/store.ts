@@ -1,6 +1,12 @@
 import { create } from "zustand";
 import { ImageRecord, ViewMode, CompareMode } from "./types";
 import { searchImages } from "./search";
+import {
+  buildImageGroups,
+  ensureGroupOrder,
+  flattenGroupsByOrder,
+  sortImagesAlphabetically,
+} from "./grouping";
 
 interface RecentlyViewedItem {
   id: string;
@@ -26,6 +32,8 @@ interface AppStore {
   thumbnailMap: Map<string, string>;
   recentlyViewed: RecentlyViewedItem[];
   containerWidth: number;
+  groupOrder: string[];
+  collapsedGroups: Set<string>;
 
   setFolderPath: (path: string | null) => void;
   setImages: (images: ImageRecord[]) => void;
@@ -51,6 +59,9 @@ interface AppStore {
   moveQuicklook: (direction: "prev" | "next") => void;
   markAsViewed: (id: string) => void;
   setContainerWidth: (width: number) => void;
+  setGroupOrder: (order: string[]) => void;
+  toggleGroupCollapse: (id: string) => void;
+  setGroupCollapse: (id: string, collapsed: boolean) => void;
 }
 
 // Load recently viewed from localStorage
@@ -75,40 +86,6 @@ const saveRecentlyViewed = (items: RecentlyViewedItem[]) => {
   }
 };
 
-// VS Code-style sorting: recently viewed first, then alphabetically
-const sortImagesVSCodeStyle = (
-  images: ImageRecord[],
-  recentlyViewed: RecentlyViewedItem[]
-): ImageRecord[] => {
-  const recentlyViewedIds = new Set(recentlyViewed.map((r) => r.id));
-
-  // Separate into recently viewed and others
-  const recentImages: ImageRecord[] = [];
-  const otherImages: ImageRecord[] = [];
-
-  for (const image of images) {
-    if (recentlyViewedIds.has(image.id)) {
-      recentImages.push(image);
-    } else {
-      otherImages.push(image);
-    }
-  }
-
-  // Sort recently viewed by timestamp (most recent first)
-  const recentViewedMap = new Map(recentlyViewed.map((r) => [r.id, r.timestamp]));
-  recentImages.sort((a, b) => {
-    const timeA = recentViewedMap.get(a.id) || 0;
-    const timeB = recentViewedMap.get(b.id) || 0;
-    return timeB - timeA;
-  });
-
-  // Sort others alphabetically by filename
-  otherImages.sort((a, b) => a.filename.localeCompare(b.filename));
-
-  // Combine: recently viewed first, then alphabetical
-  return [...recentImages, ...otherImages];
-};
-
 export const useStore = create<AppStore>((set, get) => ({
   folderPath: null,
   images: [],
@@ -128,21 +105,31 @@ export const useStore = create<AppStore>((set, get) => ({
   thumbnailMap: new Map(),
   recentlyViewed: loadRecentlyViewed(),
   containerWidth: window.innerWidth - 24,
+  groupOrder: [],
+  collapsedGroups: new Set(),
 
   setFolderPath: (path) => set({ folderPath: path }),
 
   setImages: (images) => {
-    const { query, recentlyViewed } = get();
+    const { query, groupOrder, collapsedGroups } = get();
 
-    // Sort images VS Code-style (recently viewed first, then alphabetical)
-    const sortedImages = sortImagesVSCodeStyle(images, recentlyViewed);
+    const alphabetized = sortImagesAlphabetically(images);
+    const groups = buildImageGroups(alphabetized);
+    const resolvedOrder = ensureGroupOrder(groupOrder, groups);
+    const orderedImages = flattenGroupsByOrder(groups, resolvedOrder);
 
     // Apply search filtering if there's a query
-    const filteredImages = query ? searchImages(sortedImages, query) : sortedImages;
+    const filteredImages = query ? searchImages(orderedImages, query) : orderedImages;
+
+    const validCollapsed = new Set(
+      Array.from(collapsedGroups).filter((id) => resolvedOrder.includes(id))
+    );
 
     set({
-      images: sortedImages,
+      images: orderedImages,
       filteredImages,
+      groupOrder: resolvedOrder,
+      collapsedGroups: validCollapsed,
       activeId: filteredImages[0]?.id || null,
     });
   },
@@ -228,6 +215,53 @@ export const useStore = create<AppStore>((set, get) => ({
   clearSearchSelection: () => set({ searchSelectedIds: new Set() }),
 
   setContainerWidth: (width) => set({ containerWidth: width }),
+  setGroupOrder: (order) => {
+    const { images, query } = get();
+    if (images.length === 0) {
+      set({ groupOrder: order });
+      return;
+    }
+
+    const groups = buildImageGroups(images);
+    const resolvedOrder = ensureGroupOrder(order, groups);
+    const orderedImages = flattenGroupsByOrder(groups, resolvedOrder);
+
+    const filteredImages = query ? searchImages(orderedImages, query) : orderedImages;
+    const currentActiveId = get().activeId;
+    const activeExists = filteredImages.some((img) => img.id === currentActiveId);
+    const nextActiveId = activeExists
+      ? currentActiveId
+      : filteredImages[0]?.id || null;
+
+    set({
+      groupOrder: resolvedOrder,
+      images: orderedImages,
+      filteredImages,
+      activeId: nextActiveId,
+    });
+  },
+
+  toggleGroupCollapse: (id) =>
+    set((state) => {
+      const next = new Set(state.collapsedGroups);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return { collapsedGroups: next };
+    }),
+
+  setGroupCollapse: (id, collapsed) =>
+    set((state) => {
+      const next = new Set(state.collapsedGroups);
+      if (collapsed) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return { collapsedGroups: next };
+    }),
 
   moveActive: (direction) => {
     const { filteredImages, activeId, thumbSize, containerWidth } = get();

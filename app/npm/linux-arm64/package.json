@@ -1,6 +1,6 @@
 {
   "name": "@vmasrani/fuzzy-img-viewer-linux-arm64",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "fuzzy-img-viewer binary for Linux ARM64",
   "author": "vmasrani",
   "license": "MIT",

@@ -300,7 +300,7 @@ async fn main() {
 
     let static_dir = exe_dir
         .as_ref()
-        .map(|dir| dir.join("../../../dist"))
+        .map(|dir| dir.join("../dist"))  // npm install: binary in bin/, dist in dist/
         .and_then(|path| path.canonicalize().ok())
         .or_else(|| PathBuf::from("dist").canonicalize().ok())
         .or_else(|| PathBuf::from("../dist").canonicalize().ok());

@@ -1,6 +1,6 @@
 {
   "name": "@vmasrani/fuzzy-img-viewer-darwin-arm64",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "fuzzy-img-viewer binary for macOS ARM64",
   "author": "vmasrani",
   "license": "MIT",

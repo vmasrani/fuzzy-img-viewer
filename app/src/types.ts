@@ -20,4 +20,6 @@ export interface ImageRecord {
   thumb_path?: string;
 }
 
-export type ViewMode = "grid" | "viewer" | "compare";
+export type ViewMode = "grid" | "viewer" | "compare" | "quicklook";
+
+export type CompareMode = "solo" | "grid" | "sidebyside";

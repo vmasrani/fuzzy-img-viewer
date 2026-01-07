@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ImageRecord, ViewMode } from "./types";
+import { ImageRecord, ViewMode, CompareMode } from "./types";
 import { searchImages } from "./search";
 
 interface RecentlyViewedItem {
@@ -17,6 +17,12 @@ interface AppStore {
   activeId: string | null;
   thumbSize: number;
   viewMode: ViewMode;
+  compareMode: CompareMode;
+  quicklookIndex: number;
+  commandPaletteOpen: boolean;
+  keyboardHelpOpen: boolean;
+  settingsOpen: boolean;
+  infoPanelOpen: boolean;
   thumbnailMap: Map<string, string>;
   recentlyViewed: RecentlyViewedItem[];
   containerWidth: number;
@@ -28,12 +34,21 @@ interface AppStore {
   setActiveId: (id: string | null) => void;
   setThumbSize: (size: number) => void;
   setViewMode: (mode: ViewMode) => void;
+  setCompareMode: (mode: CompareMode) => void;
+  setQuicklookIndex: (index: number) => void;
+  setCommandPaletteOpen: (open: boolean) => void;
+  setKeyboardHelpOpen: (open: boolean) => void;
+  setSettingsOpen: (open: boolean) => void;
+  setInfoPanelOpen: (open: boolean) => void;
   setThumbnailPath: (originalPath: string, thumbPath: string) => void;
   clearSelection: () => void;
+  selectAll: () => void;
+  invertSelection: () => void;
   setSearchSelectedIds: (ids: Set<string>) => void;
   toggleSearchSelection: (id: string) => void;
   clearSearchSelection: () => void;
   moveActive: (direction: "up" | "down" | "left" | "right") => void;
+  moveQuicklook: (direction: "prev" | "next") => void;
   markAsViewed: (id: string) => void;
   setContainerWidth: (width: number) => void;
 }
@@ -104,6 +119,12 @@ export const useStore = create<AppStore>((set, get) => ({
   activeId: null,
   thumbSize: 200,
   viewMode: "grid",
+  compareMode: "grid",
+  quicklookIndex: 0,
+  commandPaletteOpen: false,
+  keyboardHelpOpen: false,
+  settingsOpen: false,
+  infoPanelOpen: false,
   thumbnailMap: new Map(),
   recentlyViewed: loadRecentlyViewed(),
   containerWidth: window.innerWidth - 24,
@@ -153,6 +174,18 @@ export const useStore = create<AppStore>((set, get) => ({
 
   setViewMode: (mode) => set({ viewMode: mode }),
 
+  setCompareMode: (mode) => set({ compareMode: mode }),
+
+  setQuicklookIndex: (index) => set({ quicklookIndex: index }),
+
+  setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+
+  setKeyboardHelpOpen: (open) => set({ keyboardHelpOpen: open }),
+
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+
+  setInfoPanelOpen: (open) => set({ infoPanelOpen: open }),
+
   setThumbnailPath: (originalPath, thumbPath) =>
     set((state) => {
       const newMap = new Map(state.thumbnailMap);
@@ -161,6 +194,23 @@ export const useStore = create<AppStore>((set, get) => ({
     }),
 
   clearSelection: () => set({ selectedIds: new Set() }),
+
+  selectAll: () => {
+    const { filteredImages } = get();
+    const allIds = new Set(filteredImages.map((img) => img.id));
+    set({ selectedIds: allIds });
+  },
+
+  invertSelection: () => {
+    const { filteredImages, selectedIds } = get();
+    const invertedIds = new Set<string>();
+    filteredImages.forEach((img) => {
+      if (!selectedIds.has(img.id)) {
+        invertedIds.add(img.id);
+      }
+    });
+    set({ selectedIds: invertedIds });
+  },
 
   setSearchSelectedIds: (ids) => set({ searchSelectedIds: ids }),
 
@@ -209,6 +259,28 @@ export const useStore = create<AppStore>((set, get) => ({
     }
 
     set({ activeId: filteredImages[newIndex].id });
+  },
+
+  moveQuicklook: (direction) => {
+    const { filteredImages, selectedIds, quicklookIndex } = get();
+
+    // Determine which images to cycle through
+    // If items are selected, cycle through selected; otherwise cycle all
+    const imagesToCycle = selectedIds.size > 0
+      ? filteredImages.filter((img) => selectedIds.has(img.id))
+      : filteredImages;
+
+    if (imagesToCycle.length === 0) return;
+
+    let newIndex = quicklookIndex;
+
+    if (direction === "next") {
+      newIndex = (quicklookIndex + 1) % imagesToCycle.length;
+    } else {
+      newIndex = (quicklookIndex - 1 + imagesToCycle.length) % imagesToCycle.length;
+    }
+
+    set({ quicklookIndex: newIndex });
   },
 
   markAsViewed: (id) => {

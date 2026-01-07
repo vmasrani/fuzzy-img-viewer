@@ -327,9 +327,15 @@ async fn main() {
         println!("ℹ️  Running in development mode (API-only)");
     }
 
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    let addr = "127.0.0.1:3000";
+    let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .unwrap();
+        .unwrap_or_else(|e| {
+            eprintln!("❌ Failed to bind to {}: {}", addr, e);
+            eprintln!("   Try: lsof -i :3000 | grep LISTEN");
+            eprintln!("   Kill: kill -9 <PID>");
+            std::process::exit(1);
+        });
 
     println!("🚀 Fuzzy Image Viewer running on http://127.0.0.1:3000");
 

@@ -79,7 +79,7 @@ export function Grid() {
     return () => observer.disconnect();
   }, [setContainerWidth]);
 
-  const itemsPerRow = Math.floor(containerWidth / (thumbSize + 12));
+  const itemsPerRow = Math.max(1, Math.floor(containerWidth / (thumbSize + 12)));
 
   const rowCount = Math.ceil(displayImages.length / itemsPerRow);
 
@@ -89,6 +89,18 @@ export function Grid() {
     estimateSize: () => thumbSize + 56 + 12, // image + header + gap
     overscan: 2,
   });
+
+  // Scroll to active item when it changes
+  useEffect(() => {
+    if (!activeId || displayImages.length === 0) return;
+
+    const activeIndex = displayImages.findIndex((img) => img.id === activeId);
+    if (activeIndex === -1) return;
+
+    const activeRow = Math.floor(activeIndex / itemsPerRow);
+    rowVirtualizer.scrollToIndex(activeRow, { align: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId]);
 
   useEffect(() => {
     const visible = rowVirtualizer.getVirtualItems();

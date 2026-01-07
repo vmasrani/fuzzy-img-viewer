@@ -284,7 +284,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   markAsViewed: (id) => {
-    const { recentlyViewed, images, query } = get();
+    const { recentlyViewed } = get();
 
     // Remove existing entry if present
     const filtered = recentlyViewed.filter((item) => item.id !== id);
@@ -298,16 +298,8 @@ export const useStore = create<AppStore>((set, get) => ({
     // Save to localStorage
     saveRecentlyViewed(trimmed);
 
-    // Re-sort images with updated recently viewed
-    const sortedImages = sortImagesVSCodeStyle(images, trimmed);
-
-    // Re-apply filter if there's a search query
-    const filteredImages = query ? searchImages(sortedImages, query) : sortedImages;
-
-    set({
-      recentlyViewed: trimmed,
-      images: sortedImages,
-      filteredImages,
-    });
+    // Only update recentlyViewed - don't re-sort images during navigation
+    // Images will be sorted on next folder load
+    set({ recentlyViewed: trimmed });
   },
 }));

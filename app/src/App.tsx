@@ -230,9 +230,9 @@ export default function App() {
           if (activeId) {
             toggleSelection(activeId);
             if (e.shiftKey) {
-              moveActive("up"); // Shift+Tab moves backward
+              moveActive("left"); // Shift+Tab moves backward
             } else {
-              moveActive("down"); // Tab moves forward (down in grid)
+              moveActive("right"); // Tab moves forward
             }
           }
           break;

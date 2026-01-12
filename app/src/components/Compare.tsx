@@ -1,14 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { useStore } from "../store";
 import { convertFileSrc } from "../commands";
 
 export function Compare() {
-  const { images, selectedIds, setViewMode, compareMode, setCompareMode } = useStore();
+  const { filteredImages, selectedIds, setViewMode, compareMode, setCompareMode } = useStore();
   const [soloIndex, setSoloIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const gridContainerRef = useRef<HTMLDivElement>(null);
 
-  const selectedImages = images.filter((img) => selectedIds.has(img.id));
+  // Use filteredImages to respect current search/filter, fall back to selectedIds
+  const selectedImages = useMemo(() =>
+    filteredImages.filter((img) => selectedIds.has(img.id)),
+    [filteredImages, selectedIds]
+  );
 
   // Keyboard navigation for compare view
   useEffect(() => {
@@ -45,6 +51,35 @@ export function Compare() {
     setPan({ x: 0, y: 0 });
   }, [soloIndex]);
 
+  // Calculate grid dimensions - must be before useVirtualizer (hooks must be called unconditionally)
+  const gridCols = useMemo(() => {
+    const count = selectedImages.length;
+    if (count === 0) return 1;
+    if (count <= 2) return count;
+    if (count <= 4) return 2;
+    if (count <= 9) return 3;
+    if (count <= 16) return 4;
+    return Math.ceil(Math.sqrt(count));
+  }, [selectedImages.length]);
+
+  // Calculate rows for virtualization
+  const rows = useMemo(() => {
+    const result: typeof selectedImages[] = [];
+    for (let i = 0; i < selectedImages.length; i += gridCols) {
+      result.push(selectedImages.slice(i, i + gridCols));
+    }
+    return result;
+  }, [selectedImages, gridCols]);
+
+  // Virtual row height estimation - must be called unconditionally
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => gridContainerRef.current,
+    estimateSize: () => 300,
+    overscan: 2,
+  });
+
+  // Early return AFTER all hooks
   if (selectedImages.length === 0) {
     return (
       <div className="viewer-overlay">
@@ -55,7 +90,7 @@ export function Compare() {
         <div className="empty-state">
           <p>No images selected</p>
           <p style={{ fontSize: "14px", color: "var(--text-muted)" }}>
-            Select images in grid view using Tab to compare them
+            Select images in grid view using Shift+Arrow keys, then press Space or Enter
           </p>
         </div>
       </div>
@@ -116,21 +151,54 @@ export function Compare() {
     );
   };
 
-  // Render grid mode - all images in auto-calculated grid
+  // Render grid mode - virtualized for performance
   const renderGridMode = () => {
-    const gridCols = Math.ceil(Math.sqrt(selectedImages.length));
-
     return (
       <div
-        className="compare-grid"
-        style={{ gridTemplateColumns: `repeat(${gridCols}, 1fr)` }}
+        ref={gridContainerRef}
+        className="compare-grid-container"
+        style={{ height: "100%", overflow: "auto" }}
       >
-        {selectedImages.map((image) => (
-          <div key={image.id} className="compare-item">
-            <img src={convertFileSrc(image.path)} alt={image.filename} />
-            <div className="compare-label">{image.filename}</div>
-          </div>
-        ))}
+        <div
+          style={{
+            height: `${rowVirtualizer.getTotalSize()}px`,
+            width: "100%",
+            position: "relative",
+          }}
+        >
+          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+            const rowImages = rows[virtualRow.index];
+            return (
+              <div
+                key={virtualRow.key}
+                className="compare-grid-row"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
+                  gap: "16px",
+                  padding: "8px 24px",
+                }}
+              >
+                {rowImages.map((image) => (
+                  <div key={image.id} className="compare-item">
+                    <img
+                      src={convertFileSrc(image.thumb_path || image.path)}
+                      alt={image.filename}
+                      loading="lazy"
+                    />
+                    <div className="compare-label">{image.filename}</div>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   };
@@ -211,7 +279,7 @@ export function Compare() {
 
       <div className="compare-footer">
         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
-          Press Tab to switch modes • {compareMode === "solo" ? "← → to navigate" : ""}
+          Tab to switch modes • Space/Esc to close{compareMode === "solo" ? " • ← → to navigate" : ""}
         </span>
       </div>
     </div>

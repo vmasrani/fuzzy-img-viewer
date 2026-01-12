@@ -7,6 +7,7 @@ import {
   flattenGroupsByOrder,
   sortImagesAlphabetically,
 } from "./grouping";
+import { toggleSetItem } from "./utils";
 
 interface RecentlyViewedItem {
   id: string;
@@ -21,19 +22,20 @@ interface AppStore {
   selectedIds: Set<string>;
   searchSelectedIds: Set<string>;
   activeId: string | null;
+  selectionAnchorId: string | null;
   thumbSize: number;
   viewMode: ViewMode;
   compareMode: CompareMode;
   quicklookIndex: number;
   commandPaletteOpen: boolean;
   keyboardHelpOpen: boolean;
-  settingsOpen: boolean;
   infoPanelOpen: boolean;
   thumbnailMap: Map<string, string>;
   recentlyViewed: RecentlyViewedItem[];
   containerWidth: number;
   groupOrder: string[];
   collapsedGroups: Set<string>;
+  darkMode: boolean;
 
   setFolderPath: (path: string | null) => void;
   setImages: (images: ImageRecord[]) => void;
@@ -46,7 +48,6 @@ interface AppStore {
   setQuicklookIndex: (index: number) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setKeyboardHelpOpen: (open: boolean) => void;
-  setSettingsOpen: (open: boolean) => void;
   setInfoPanelOpen: (open: boolean) => void;
   setThumbnailPath: (originalPath: string, thumbPath: string) => void;
   clearSelection: () => void;
@@ -55,13 +56,15 @@ interface AppStore {
   setSearchSelectedIds: (ids: Set<string>) => void;
   toggleSearchSelection: (id: string) => void;
   clearSearchSelection: () => void;
-  moveActive: (direction: "up" | "down" | "left" | "right") => void;
+  moveActive: (direction: "up" | "down" | "left" | "right", extendSelection?: boolean) => void;
   moveQuicklook: (direction: "prev" | "next") => void;
   markAsViewed: (id: string) => void;
   setContainerWidth: (width: number) => void;
   setGroupOrder: (order: string[]) => void;
   toggleGroupCollapse: (id: string) => void;
   setGroupCollapse: (id: string, collapsed: boolean) => void;
+  toggleDarkMode: () => void;
+  selectRange: (fromId: string, toId: string) => void;
 }
 
 // Load recently viewed from localStorage
@@ -86,6 +89,30 @@ const saveRecentlyViewed = (items: RecentlyViewedItem[]) => {
   }
 };
 
+// Load dark mode preference from localStorage
+const loadDarkMode = (): boolean => {
+  try {
+    const stored = localStorage.getItem("darkMode");
+    return stored === "true";
+  } catch {
+    return false;
+  }
+};
+
+// Apply dark mode class to document
+const applyDarkMode = (isDark: boolean) => {
+  if (isDark) {
+    document.documentElement.classList.add("dark");
+  } else {
+    document.documentElement.classList.remove("dark");
+  }
+  try {
+    localStorage.setItem("darkMode", String(isDark));
+  } catch {
+    // ignore
+  }
+};
+
 export const useStore = create<AppStore>((set, get) => ({
   folderPath: null,
   images: [],
@@ -94,19 +121,20 @@ export const useStore = create<AppStore>((set, get) => ({
   selectedIds: new Set(),
   searchSelectedIds: new Set(),
   activeId: null,
+  selectionAnchorId: null,
   thumbSize: 200,
   viewMode: "grid",
   compareMode: "grid",
   quicklookIndex: 0,
   commandPaletteOpen: false,
   keyboardHelpOpen: false,
-  settingsOpen: false,
   infoPanelOpen: false,
   thumbnailMap: new Map(),
   recentlyViewed: loadRecentlyViewed(),
   containerWidth: window.innerWidth - 24,
   groupOrder: [],
   collapsedGroups: new Set(),
+  darkMode: loadDarkMode(),
 
   setFolderPath: (path) => set({ folderPath: path }),
 
@@ -145,15 +173,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   toggleSelection: (id) =>
-    set((state) => {
-      const newSelected = new Set(state.selectedIds);
-      if (newSelected.has(id)) {
-        newSelected.delete(id);
-      } else {
-        newSelected.add(id);
-      }
-      return { selectedIds: newSelected };
-    }),
+    set((state) => ({ selectedIds: toggleSetItem(state.selectedIds, id) })),
 
   setActiveId: (id) => set({ activeId: id }),
 
@@ -169,8 +189,6 @@ export const useStore = create<AppStore>((set, get) => ({
 
   setKeyboardHelpOpen: (open) => set({ keyboardHelpOpen: open }),
 
-  setSettingsOpen: (open) => set({ settingsOpen: open }),
-
   setInfoPanelOpen: (open) => set({ infoPanelOpen: open }),
 
   setThumbnailPath: (originalPath, thumbPath) =>
@@ -180,7 +198,7 @@ export const useStore = create<AppStore>((set, get) => ({
       return { thumbnailMap: newMap };
     }),
 
-  clearSelection: () => set({ selectedIds: new Set() }),
+  clearSelection: () => set({ selectedIds: new Set(), selectionAnchorId: null }),
 
   selectAll: () => {
     const { filteredImages } = get();
@@ -202,15 +220,7 @@ export const useStore = create<AppStore>((set, get) => ({
   setSearchSelectedIds: (ids) => set({ searchSelectedIds: ids }),
 
   toggleSearchSelection: (id) =>
-    set((state) => {
-      const newSet = new Set(state.searchSelectedIds);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return { searchSelectedIds: newSet };
-    }),
+    set((state) => ({ searchSelectedIds: toggleSetItem(state.searchSelectedIds, id) })),
 
   clearSearchSelection: () => set({ searchSelectedIds: new Set() }),
 
@@ -242,15 +252,7 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   toggleGroupCollapse: (id) =>
-    set((state) => {
-      const next = new Set(state.collapsedGroups);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return { collapsedGroups: next };
-    }),
+    set((state) => ({ collapsedGroups: toggleSetItem(state.collapsedGroups, id) })),
 
   setGroupCollapse: (id, collapsed) =>
     set((state) => {
@@ -263,13 +265,13 @@ export const useStore = create<AppStore>((set, get) => ({
       return { collapsedGroups: next };
     }),
 
-  moveActive: (direction) => {
-    const { filteredImages, activeId, thumbSize, containerWidth } = get();
+  moveActive: (direction, extendSelection = false) => {
+    const { filteredImages, activeId, thumbSize, containerWidth, selectionAnchorId } = get();
     if (filteredImages.length === 0) return;
 
     const currentIndex = filteredImages.findIndex((img) => img.id === activeId);
     if (currentIndex === -1) {
-      set({ activeId: filteredImages[0].id });
+      set({ activeId: filteredImages[0].id, selectionAnchorId: filteredImages[0].id });
       return;
     }
 
@@ -292,7 +294,34 @@ export const useStore = create<AppStore>((set, get) => ({
         break;
     }
 
-    set({ activeId: filteredImages[newIndex].id });
+    const newActiveId = filteredImages[newIndex].id;
+
+    if (extendSelection) {
+      // Use existing anchor or current position as anchor
+      const anchorId = selectionAnchorId || activeId;
+      const anchorIndex = filteredImages.findIndex((img) => img.id === anchorId);
+
+      // Select all items between anchor and new position
+      const startIdx = Math.min(anchorIndex, newIndex);
+      const endIdx = Math.max(anchorIndex, newIndex);
+      const newSelectedIds = new Set<string>();
+      for (let i = startIdx; i <= endIdx; i++) {
+        newSelectedIds.add(filteredImages[i].id);
+      }
+
+      set({
+        activeId: newActiveId,
+        selectedIds: newSelectedIds,
+        selectionAnchorId: anchorId
+      });
+    } else {
+      // Normal move without selection - clear selection and reset anchor
+      set({
+        activeId: newActiveId,
+        selectedIds: new Set(),
+        selectionAnchorId: null
+      });
+    }
   },
 
   moveQuicklook: (direction) => {
@@ -336,4 +365,34 @@ export const useStore = create<AppStore>((set, get) => ({
     // Images will be sorted on next folder load
     set({ recentlyViewed: trimmed });
   },
+
+  toggleDarkMode: () => {
+    const newDarkMode = !get().darkMode;
+    applyDarkMode(newDarkMode);
+    set({ darkMode: newDarkMode });
+  },
+
+  selectRange: (fromId, toId) => {
+    const { filteredImages } = get();
+    const fromIndex = filteredImages.findIndex((img) => img.id === fromId);
+    const toIndex = filteredImages.findIndex((img) => img.id === toId);
+
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const startIdx = Math.min(fromIndex, toIndex);
+    const endIdx = Math.max(fromIndex, toIndex);
+    const newSelectedIds = new Set<string>();
+    for (let i = startIdx; i <= endIdx; i++) {
+      newSelectedIds.add(filteredImages[i].id);
+    }
+
+    set({
+      selectedIds: newSelectedIds,
+      selectionAnchorId: fromId,
+      activeId: toId
+    });
+  },
 }));
+
+// Apply initial dark mode on load
+applyDarkMode(loadDarkMode());

@@ -16,6 +16,8 @@ export function SearchBar() {
     setSearchSelectedIds,
     clearSearchSelection,
     folderPath,
+    darkMode,
+    toggleDarkMode,
   } = useStore();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -143,94 +145,95 @@ export function SearchBar() {
 
   return (
     <div className="search-header">
-      <div className="search-hero">
-        <div className="search-hero-copy">
-          <h1>Photo Library</h1>
-          <p>
-            {folderPath
-              ? `Browsing ${folderName} • ${images.length.toLocaleString()} captures`
-              : "Choose a folder to start exploring your captures"}
-          </p>
+      <div className="search-header-row">
+        <div className="search-header-left">
+          <div className="search-header-title-row">
+            <h1>{folderName}</h1>
+            <span className="search-header-count">
+              {images.length.toLocaleString()} images
+            </span>
+          </div>
+          {folderPath && (
+            <span className="search-header-path" title={folderPath}>
+              {folderPath}
+            </span>
+          )}
         </div>
-      </div>
-      <div className="search-container">
-        <input
-          ref={inputRef}
-          type="text"
-          className="search-box"
-          placeholder="Search images (fuzzy search)..."
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => setIsDropdownOpen(true)}
-          onKeyDown={handleKeyDown}
-          autoFocus
-        />
-        {isDropdownOpen && filteredImages.length > 0 && (
-          <div ref={dropdownRef} className="search-dropdown">
-            {filteredImages.slice(0, 100).map((image, index) => {
-              const isHighlighted = index === selectedIndex;
-              const isChecked = searchSelectedIds.has(image.id);
-              return (
-                <div
-                  key={image.id}
-                  className={`search-dropdown-item ${isHighlighted ? "highlighted" : ""} ${
-                    isChecked ? "checked" : ""
-                  }`}
-                  onClick={() => handleSelectFile(index)}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                >
-                  <div className="search-dropdown-item-content">
-                    <span className="search-dropdown-checkbox">
-                      {isChecked ? "✓" : " "}
-                    </span>
-                    <div className="search-dropdown-text">
-                      <span>
-                        {getHighlightSegments(image.filename, query).map((seg, i) =>
-                          seg.isMatch ? <mark key={i}>{seg.text}</mark> : <span key={i}>{seg.text}</span>
-                        )}
+        <div className="search-container">
+          <input
+            ref={inputRef}
+            type="text"
+            className="search-box"
+            placeholder="Search..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setIsDropdownOpen(true)}
+            onKeyDown={handleKeyDown}
+          />
+          {isDropdownOpen && filteredImages.length > 0 && (
+            <div ref={dropdownRef} className="search-dropdown">
+              {filteredImages.slice(0, 100).map((image, index) => {
+                const isHighlighted = index === selectedIndex;
+                const isChecked = searchSelectedIds.has(image.id);
+                return (
+                  <div
+                    key={image.id}
+                    className={`search-dropdown-item ${isHighlighted ? "highlighted" : ""} ${
+                      isChecked ? "checked" : ""
+                    }`}
+                    onClick={() => handleSelectFile(index)}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  >
+                    <div className="search-dropdown-item-content">
+                      <span className="search-dropdown-checkbox">
+                        {isChecked ? "✓" : " "}
                       </span>
-                      <span className="search-dropdown-path">{image.parent_path}</span>
+                      <div className="search-dropdown-text">
+                        <span>
+                          {getHighlightSegments(image.filename, query).map((seg, i) =>
+                            seg.isMatch ? <mark key={i}>{seg.text}</mark> : <span key={i}>{seg.text}</span>
+                          )}
+                        </span>
+                        <span className="search-dropdown-path">{image.parent_path}</span>
+                      </div>
                     </div>
                   </div>
+                );
+              })}
+              {filteredImages.length > 100 && (
+                <div className="search-dropdown-item disabled">
+                  ... and {filteredImages.length - 100} more files
                 </div>
-              );
-            })}
-            {filteredImages.length > 100 && (
-              <div className="search-dropdown-item disabled">
-                ... and {filteredImages.length - 100} more files
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="search-info">
-        <div className="search-info-details">
-          <span className="search-info-summary">
-            {searchSelectedIds.size > 0 ? (
-              <>
-                {searchSelectedIds.size} selected • Showing {filteredImages.length} of {images.length} images
-              </>
-            ) : (
-              <>
-                Showing {filteredImages.length} of {images.length} images
-              </>
-            )}
-          </span>
-          <div className="search-info-stats">
-            <span className="info-chip">Visible {filteredImages.length.toLocaleString()}</span>
-            <span className="info-chip">Selected {searchSelectedIds.size.toLocaleString()}</span>
-            <span className="info-chip">Thumb {thumbSize}px</span>
-          </div>
-        </div>
-        <div className="toolbar">
-          {searchSelectedIds.size > 0 && (
-            <button onClick={() => clearSearchSelection()}>Clear</button>
+              )}
+            </div>
           )}
-          <button onClick={() => setThumbSize(thumbSize - 50)}>-</button>
-          <span style={{ minWidth: "60px", textAlign: "center" }}>
-            {thumbSize}px
-          </span>
-          <button onClick={() => setThumbSize(thumbSize + 50)}>+</button>
+        </div>
+        <div className="search-header-right">
+          <div className="search-info-stats">
+            <span className="info-chip">
+              {filteredImages.length !== images.length
+                ? `${filteredImages.length}/${images.length}`
+                : filteredImages.length.toLocaleString()} visible
+            </span>
+            {searchSelectedIds.size > 0 && (
+              <span className="info-chip selected">{searchSelectedIds.size} selected</span>
+            )}
+            <span className="info-chip">{thumbSize}px</span>
+          </div>
+          <div className="toolbar">
+            {searchSelectedIds.size > 0 && (
+              <button onClick={() => clearSearchSelection()}>Clear</button>
+            )}
+            <button onClick={() => setThumbSize(thumbSize - 50)}>-</button>
+            <button onClick={() => setThumbSize(thumbSize + 50)}>+</button>
+            <button
+              onClick={toggleDarkMode}
+              className="theme-toggle"
+              title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {darkMode ? "Light" : "Dark"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

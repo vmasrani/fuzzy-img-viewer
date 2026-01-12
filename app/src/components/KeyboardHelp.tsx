@@ -47,7 +47,6 @@ const shortcutGroups: ShortcutGroup[] = [
     title: "General",
     shortcuts: [
       { key: "⌘⇧P", description: "Open command palette" },
-      { key: "⌘,", description: "Open settings" },
       { key: "?", description: "Show this help" },
       { key: "Esc", description: "Close overlay / Clear selection" },
     ],

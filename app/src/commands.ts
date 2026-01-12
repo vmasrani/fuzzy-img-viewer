@@ -32,14 +32,6 @@ export async function listFolders(path: string = ""): Promise<FolderListResponse
   return response.json();
 }
 
-export async function selectFolder(): Promise<string> {
-  const path = prompt("Enter folder path to scan:");
-  if (!path) {
-    throw new Error("No folder path provided");
-  }
-  return path;
-}
-
 export async function scanFolder(folderPath: string): Promise<ImageRecord[]> {
   const response = await fetch(`${API_BASE}/scan`, {
     method: "POST",

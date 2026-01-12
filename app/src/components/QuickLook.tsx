@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useStore } from "../store";
 import { convertFileSrc } from "../commands";
+import { formatBytes } from "../utils";
 
 export function QuickLook() {
   const {
@@ -10,7 +11,10 @@ export function QuickLook() {
     setViewMode,
     moveQuicklook,
     markAsViewed,
+    setActiveId,
   } = useStore();
+
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
 
   // Determine which images to cycle through
   const imagesToShow = useMemo(() => {
@@ -21,6 +25,11 @@ export function QuickLook() {
   }, [filteredImages, selectedIds]);
 
   const currentImage = imagesToShow[quicklookIndex];
+
+  // Reset dimensions when image changes
+  useEffect(() => {
+    setImageDimensions(null);
+  }, [quicklookIndex]);
 
   // Mark as viewed when displayed
   useEffect(() => {
@@ -45,6 +54,21 @@ export function QuickLook() {
     });
   }, [quicklookIndex, imagesToShow]);
 
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget;
+    setImageDimensions({
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+    });
+  };
+
+  const handleOpenInViewer = () => {
+    if (currentImage) {
+      setActiveId(currentImage.id);
+      setViewMode("viewer");
+    }
+  };
+
   if (!currentImage) {
     return (
       <div className="quicklook-overlay" onClick={() => setViewMode("grid")}>
@@ -61,32 +85,60 @@ export function QuickLook() {
     }
   };
 
+  const metadata = currentImage.metadata;
+
   return (
     <div className="quicklook-overlay" onClick={handleBackdropClick}>
       <div className="quicklook-container">
-        <div className="quicklook-header">
-          <div className="quicklook-title">
-            <span className="quicklook-filename">{currentImage.filename}</span>
-            <span className="quicklook-counter">
-              {quicklookIndex + 1} / {imagesToShow.length}
-              {selectedIds.size > 0 && ` (${selectedIds.size} selected)`}
-            </span>
+        {/* Header */}
+        <header className="quicklook-header">
+          <div className="quicklook-header-left">
+            <h2 className="quicklook-filename">{currentImage.filename}</h2>
+            <div className="quicklook-meta-row">
+              <span className="quicklook-counter">
+                {quicklookIndex + 1} of {imagesToShow.length}
+              </span>
+              {selectedIds.size > 0 && (
+                <span className="quicklook-selected-badge">
+                  {selectedIds.size} selected
+                </span>
+              )}
+            </div>
           </div>
-          <button
-            className="quicklook-close"
-            onClick={() => setViewMode("grid")}
-          >
-            <span>×</span>
-          </button>
-        </div>
+          <div className="quicklook-header-right">
+            <button
+              className="quicklook-action-btn"
+              onClick={handleOpenInViewer}
+              title="Open in viewer (Enter)"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M6 4L10 8L6 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Open
+            </button>
+            <button
+              className="quicklook-close-btn"
+              onClick={() => setViewMode("grid")}
+              title="Close (Space/Esc)"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </button>
+          </div>
+        </header>
 
+        {/* Image Area */}
         <div className="quicklook-content">
           {imagesToShow.length > 1 && (
             <button
               className="quicklook-nav quicklook-nav-prev"
               onClick={() => moveQuicklook("prev")}
+              aria-label="Previous image"
             >
-              ‹
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M12 15L7 10L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
           )}
 
@@ -96,6 +148,7 @@ export function QuickLook() {
               alt={currentImage.filename}
               className="quicklook-image"
               draggable={false}
+              onLoad={handleImageLoad}
             />
           </div>
 
@@ -103,18 +156,42 @@ export function QuickLook() {
             <button
               className="quicklook-nav quicklook-nav-next"
               onClick={() => moveQuicklook("next")}
+              aria-label="Next image"
             >
-              ›
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <path d="M8 15L13 10L8 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
             </button>
           )}
         </div>
 
-        <div className="quicklook-footer">
-          <span className="quicklook-path">{currentImage.path}</span>
-          {currentImage.metadata.date && (
-            <span className="quicklook-meta">{currentImage.metadata.date}</span>
-          )}
-        </div>
+        {/* Footer with metadata */}
+        <footer className="quicklook-footer">
+          <div className="quicklook-info-chips">
+            {imageDimensions && (
+              <span className="quicklook-chip">
+                {imageDimensions.width} × {imageDimensions.height}
+              </span>
+            )}
+            <span className="quicklook-chip">
+              {formatBytes(currentImage.size_bytes)}
+            </span>
+            {metadata.date && (
+              <span className="quicklook-chip">{metadata.date}</span>
+            )}
+            {metadata.series && (
+              <span className="quicklook-chip">{metadata.series}</span>
+            )}
+            {metadata.frame !== null && (
+              <span className="quicklook-chip">Frame #{metadata.frame}</span>
+            )}
+          </div>
+          <div className="quicklook-hints">
+            <span><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> Navigate</span>
+            <span><kbd>Enter</kbd> Open</span>
+            <span><kbd>Space</kbd> Close</span>
+          </div>
+        </footer>
       </div>
     </div>
   );

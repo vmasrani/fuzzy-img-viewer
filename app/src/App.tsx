@@ -22,12 +22,12 @@ function KeybindingsHelp() {
         <span>navigate</span>
       </div>
       <div className="keybinding">
-        <span className="key">Space</span>
-        <span>preview</span>
+        <span className="key">⇧+↑↓←→</span>
+        <span>select</span>
       </div>
       <div className="keybinding">
-        <span className="key">Tab</span>
-        <span>select</span>
+        <span className="key">Space</span>
+        <span>preview</span>
       </div>
       <div className="keybinding">
         <span className="key">Enter</span>
@@ -53,7 +53,6 @@ export default function App() {
     viewMode,
     setViewMode,
     activeId,
-    toggleSelection,
     moveActive,
     moveQuicklook,
     setQuery,
@@ -67,8 +66,6 @@ export default function App() {
     setCommandPaletteOpen,
     keyboardHelpOpen,
     setKeyboardHelpOpen,
-    settingsOpen,
-    setSettingsOpen,
     infoPanelOpen,
     setInfoPanelOpen,
     setQuicklookIndex,
@@ -115,13 +112,6 @@ export default function App() {
         return;
       }
 
-      // Settings: Cmd+,
-      if (isMeta && e.key === ",") {
-        e.preventDefault();
-        setSettingsOpen(!settingsOpen);
-        return;
-      }
-
       // Select all: Cmd+A
       if (isMeta && e.key === "a") {
         e.preventDefault();
@@ -149,8 +139,6 @@ export default function App() {
             setCommandPaletteOpen(false);
           } else if (keyboardHelpOpen) {
             setKeyboardHelpOpen(false);
-          } else if (settingsOpen) {
-            setSettingsOpen(false);
           } else if (viewMode === "quicklook") {
             setViewMode("grid");
           } else if (viewMode !== "grid") {
@@ -165,42 +153,52 @@ export default function App() {
         case "ArrowUp":
           e.preventDefault();
           if (viewMode === "quicklook") {
-            // No action for up/down in quicklook
-          } else {
-            moveActive("up");
+            moveQuicklook("prev");
+          } else if (viewMode === "grid") {
+            moveActive("up", e.shiftKey);
           }
+          // Compare mode handles its own arrow keys
           break;
 
         case "ArrowDown":
           e.preventDefault();
           if (viewMode === "quicklook") {
-            // No action for up/down in quicklook
-          } else {
-            moveActive("down");
+            moveQuicklook("next");
+          } else if (viewMode === "grid") {
+            moveActive("down", e.shiftKey);
           }
+          // Compare mode handles its own arrow keys
           break;
 
         case "ArrowLeft":
           e.preventDefault();
           if (viewMode === "quicklook") {
             moveQuicklook("prev");
-          } else {
-            moveActive("left");
+          } else if (viewMode === "grid") {
+            moveActive("left", e.shiftKey);
           }
+          // Compare mode handles its own arrow keys
           break;
 
         case "ArrowRight":
           e.preventDefault();
           if (viewMode === "quicklook") {
             moveQuicklook("next");
-          } else {
-            moveActive("right");
+          } else if (viewMode === "grid") {
+            moveActive("right", e.shiftKey);
           }
+          // Compare mode handles its own arrow keys
           break;
 
         case "Enter":
-          if (activeId && viewMode === "grid") {
-            setViewMode("viewer");
+          if (viewMode === "grid") {
+            if (selectedIds.size > 1) {
+              // Multiple images selected - open compare view
+              setViewMode("compare");
+            } else if (activeId) {
+              // Single or no selection - open viewer for active image
+              setViewMode("viewer");
+            }
           }
           break;
 
@@ -208,34 +206,29 @@ export default function App() {
           e.preventDefault();
           if (viewMode === "quicklook") {
             setViewMode("grid");
+          } else if (viewMode === "compare") {
+            setViewMode("grid");
           } else if (viewMode === "grid") {
-            // Set quicklook index based on current active item
-            const activeIndex = filteredImages.findIndex((img) => img.id === activeId);
-            if (activeIndex >= 0) {
-              // If selection exists, find index within selected items
-              if (selectedIds.size > 0) {
-                const selectedImages = filteredImages.filter((img) => selectedIds.has(img.id));
-                const selectedIndex = selectedImages.findIndex((img) => img.id === activeId);
-                setQuicklookIndex(selectedIndex >= 0 ? selectedIndex : 0);
-              } else {
-                setQuicklookIndex(activeIndex);
+            if (selectedIds.size > 1) {
+              // Multiple images selected - open compare view
+              setViewMode("compare");
+            } else {
+              // Single or no selection - open quicklook
+              const activeIndex = filteredImages.findIndex((img) => img.id === activeId);
+              if (activeIndex >= 0) {
+                if (selectedIds.size > 0) {
+                  const selectedImages = filteredImages.filter((img) => selectedIds.has(img.id));
+                  const selectedIndex = selectedImages.findIndex((img) => img.id === activeId);
+                  setQuicklookIndex(selectedIndex >= 0 ? selectedIndex : 0);
+                } else {
+                  setQuicklookIndex(activeIndex);
+                }
               }
+              setViewMode("quicklook");
             }
-            setViewMode("quicklook");
           }
           break;
 
-        case "Tab": // Tab - toggle selection and move to next (fzf style)
-          e.preventDefault();
-          if (activeId) {
-            toggleSelection(activeId);
-            if (e.shiftKey) {
-              moveActive("left"); // Shift+Tab moves backward
-            } else {
-              moveActive("right"); // Tab moves forward
-            }
-          }
-          break;
 
         case "g":
           if (!isMeta) {
@@ -276,7 +269,6 @@ export default function App() {
     viewMode,
     activeId,
     setViewMode,
-    toggleSelection,
     moveActive,
     moveQuicklook,
     setQuery,
@@ -290,8 +282,6 @@ export default function App() {
     setCommandPaletteOpen,
     keyboardHelpOpen,
     setKeyboardHelpOpen,
-    settingsOpen,
-    setSettingsOpen,
     infoPanelOpen,
     setInfoPanelOpen,
     setQuicklookIndex,
@@ -338,7 +328,7 @@ export default function App() {
           <div style={{ marginTop: "32px", fontSize: "12px", color: "#666" }}>
             <p>Keyboard shortcuts:</p>
             <p>/ - Search • ↑↓←→ - Navigate • Space - Preview</p>
-            <p>Tab - Select • Enter - Detail • ⌘⇧P - Commands</p>
+            <p>⇧+Arrows - Select • Enter - Detail • ⌘⇧P - Commands</p>
           </div>
         </div>
       </div>

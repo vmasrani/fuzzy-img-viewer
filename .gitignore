@@ -1,7 +1,11 @@
 # PNG folder and zip files (as specified)
 pngs/
 *.zip
+*.tgz
 app.zip
+
+# npm platform binaries
+app/npm/*/fuzzy-img-viewer-backend
 
 app/bin/fuzzy-img-viewer-backend
 # Claude development artifacts

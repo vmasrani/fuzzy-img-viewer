@@ -324,7 +324,7 @@ async fn main() {
             println!("   API-only mode (expecting separate frontend server)");
         }
     } else {
-        println!("ℹ️  Running in development mode (API-only)");
+        println!("ℹ️  Development mode: API server only");
     }
 
     let addr = "127.0.0.1:3000";
@@ -337,7 +337,11 @@ async fn main() {
             std::process::exit(1);
         });
 
-    println!("🚀 Fuzzy Image Viewer running on http://127.0.0.1:3000");
+    if static_dir.as_ref().map_or(false, |d| d.exists()) {
+        println!("🚀 Fuzzy Image Viewer running on http://localhost:3000");
+    } else {
+        println!("🔌 API server ready");
+    }
 
     axum::serve(listener, app).await.unwrap();
 }

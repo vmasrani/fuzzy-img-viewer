@@ -11,6 +11,28 @@ export interface FolderListResponse {
   folders: string[];
 }
 
+export interface SubfolderInfo {
+  path: string;
+  name: string;
+  image_count: number;
+  preview_images: string[];
+}
+
+export interface SiblingFolderInfo {
+  path: string;
+  name: string;
+  image_count: number;
+}
+
+export interface FolderMetadata {
+  path: string;
+  name: string;
+  subfolders: SubfolderInfo[];
+  sibling_folders: SiblingFolderInfo[];
+  image_count: number;
+  has_subfolders: boolean;
+}
+
 export async function getInitialData(): Promise<InitialData> {
   const response = await fetch(`${API_BASE}/initial`);
 
@@ -27,6 +49,16 @@ export async function listFolders(path: string = ""): Promise<FolderListResponse
 
   if (!response.ok) {
     throw new Error(`Failed to list folders: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+
+export async function getFolderInfo(path: string): Promise<FolderMetadata> {
+  const response = await fetch(`${API_BASE}/folder-info?path=${encodeURIComponent(path)}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to get folder info: ${response.statusText}`);
   }
 
   return response.json();

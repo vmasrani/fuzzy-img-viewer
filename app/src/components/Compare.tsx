@@ -4,16 +4,40 @@ import { useStore } from "../store";
 import { convertFileSrc } from "../commands";
 
 export function Compare() {
-  const { filteredImages, selectedIds, setViewMode, compareMode, setCompareMode } = useStore();
+  const {
+    filteredImages,
+    selectedIds,
+    setViewMode,
+    compareMode,
+    setCompareMode,
+    pinnedImages,
+    clearPinnedImages,
+  } = useStore();
   const [soloIndex, setSoloIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const gridContainerRef = useRef<HTMLDivElement>(null);
 
-  // Use filteredImages to respect current search/filter, fall back to selectedIds
-  const selectedImages = useMemo(() =>
-    filteredImages.filter((img) => selectedIds.has(img.id)),
-    [filteredImages, selectedIds]
+  // Combine pinned images with selected images from current folder
+  // Use path for deduplication since id includes mtime which may differ
+  const selectedImages = useMemo(() => {
+    const currentSelected = filteredImages.filter((img) => selectedIds.has(img.id));
+    const pinnedPaths = new Set(pinnedImages.map((img) => img.path));
+
+    // Add pinned images first, then current selection (avoiding duplicates)
+    const combined = [...pinnedImages];
+    for (const img of currentSelected) {
+      if (!pinnedPaths.has(img.path)) {
+        combined.push(img);
+      }
+    }
+    return combined;
+  }, [filteredImages, selectedIds, pinnedImages]);
+
+  // Track which images are pinned (for UI highlighting)
+  const pinnedPaths = useMemo(
+    () => new Set(pinnedImages.map((img) => img.path)),
+    [pinnedImages]
   );
 
   // Keyboard navigation for compare view
@@ -186,7 +210,13 @@ export function Compare() {
                 }}
               >
                 {rowImages.map((image) => (
-                  <div key={image.id} className="compare-item">
+                  <div
+                    key={image.id}
+                    className={`compare-item ${pinnedPaths.has(image.path) ? "pinned" : ""}`}
+                  >
+                    {pinnedPaths.has(image.path) && (
+                      <span className="compare-item-badge">pinned</span>
+                    )}
                     <img
                       src={convertFileSrc(image.thumb_path || image.path)}
                       alt={image.filename}
@@ -243,6 +273,9 @@ export function Compare() {
     sidebyside: "Side-by-Side",
   };
 
+  const pinnedCount = pinnedImages.length;
+  const currentCount = selectedImages.length - pinnedCount;
+
   return (
     <div className="viewer-overlay">
       <div className="viewer-header">
@@ -250,6 +283,11 @@ export function Compare() {
           <span>
             Compare Mode - {selectedImages.length} image
             {selectedImages.length !== 1 ? "s" : ""}
+            {pinnedCount > 0 && (
+              <span style={{ color: "var(--accent)", marginLeft: "8px" }}>
+                ({pinnedCount} pinned{currentCount > 0 ? `, ${currentCount} selected` : ""})
+              </span>
+            )}
           </span>
           <div className="compare-mode-switcher">
             {(["solo", "grid", "sidebyside"] as const).map((mode) => (
@@ -264,6 +302,11 @@ export function Compare() {
           </div>
         </div>
         <div style={{ display: "flex", gap: "8px" }}>
+          {pinnedCount > 0 && (
+            <button onClick={clearPinnedImages} title="Clear all pinned images (Cmd+Shift+X)">
+              Clear Pinned
+            </button>
+          )}
           {(compareMode === "solo" || compareMode === "sidebyside") && (
             <button onClick={() => setZoom(1)}>Reset Zoom</button>
           )}
@@ -280,6 +323,7 @@ export function Compare() {
       <div className="compare-footer">
         <span style={{ color: "var(--text-muted)", fontSize: "12px" }}>
           Tab to switch modes • Space/Esc to close{compareMode === "solo" ? " • ← → to navigate" : ""}
+          {pinnedCount > 0 && " • Cmd+Shift+X to clear pins"}
         </span>
       </div>
     </div>

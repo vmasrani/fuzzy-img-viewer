@@ -53,3 +53,8 @@ export function toggleSetItem<T>(set: Set<T>, item: T): Set<T> {
   }
   return newSet;
 }
+
+// Normalize path by removing trailing slashes for consistent comparison
+export function normalizePath(path: string): string {
+  return path.replace(/\/+$/, "");
+}

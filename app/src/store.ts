@@ -8,11 +8,19 @@ import {
   sortImagesAlphabetically,
 } from "./grouping";
 import { toggleSetItem } from "./utils";
+import { FolderMetadata, SiblingFolderInfo } from "./commands";
 
 interface RecentlyViewedItem {
   id: string;
   timestamp: number;
 }
+
+export interface PathSegment {
+  name: string;
+  fullPath: string;
+}
+
+type FolderViewMode = "overview" | "images";
 
 interface AppStore {
   folderPath: string | null;
@@ -36,6 +44,17 @@ interface AppStore {
   groupOrder: string[];
   collapsedGroups: Set<string>;
   darkMode: boolean;
+
+  // Pinned images for cross-folder comparison
+  pinnedImages: ImageRecord[];
+
+  // Navigation state
+  pathSegments: PathSegment[];
+  siblingFolders: SiblingFolderInfo[];
+  sidebarOpen: boolean;
+  folderViewMode: FolderViewMode;
+  folderMetadata: FolderMetadata | null;
+  activeFolderIndex: number;
 
   setFolderPath: (path: string | null) => void;
   setImages: (images: ImageRecord[]) => void;
@@ -65,6 +84,23 @@ interface AppStore {
   setGroupCollapse: (id: string, collapsed: boolean) => void;
   toggleDarkMode: () => void;
   selectRange: (fromId: string, toId: string) => void;
+
+  // Pinned images actions
+  pinSelectedImages: () => void;
+  unpinImages: (ids: string[]) => void;
+  clearPinnedImages: () => void;
+  togglePinActive: () => void;
+
+  // Navigation actions
+  setPathSegments: (segments: PathSegment[]) => void;
+  setSiblingFolders: (folders: SiblingFolderInfo[]) => void;
+  toggleSidebar: () => void;
+  setSidebarOpen: (open: boolean) => void;
+  setFolderViewMode: (mode: FolderViewMode) => void;
+  setFolderMetadata: (metadata: FolderMetadata | null) => void;
+  navigateUp: () => string | null;
+  setActiveFolderIndex: (index: number) => void;
+  moveFolderActive: (direction: "up" | "down" | "left" | "right") => void;
 }
 
 // Load recently viewed from localStorage
@@ -97,6 +133,44 @@ const loadDarkMode = (): boolean => {
   } catch {
     return false;
   }
+};
+
+// Load sidebar open state from localStorage
+const loadSidebarOpen = (): boolean => {
+  try {
+    const stored = localStorage.getItem("sidebarOpen");
+    return stored === "true";
+  } catch {
+    return false;
+  }
+};
+
+// Save sidebar open state to localStorage
+const saveSidebarOpen = (open: boolean) => {
+  try {
+    localStorage.setItem("sidebarOpen", String(open));
+  } catch {
+    // ignore
+  }
+};
+
+// Parse folder path into segments
+const parsePathSegments = (folderPath: string): PathSegment[] => {
+  if (!folderPath) return [];
+
+  const parts = folderPath.split("/").filter(Boolean);
+  const segments: PathSegment[] = [];
+
+  let currentPath = "";
+  for (const part of parts) {
+    currentPath += "/" + part;
+    segments.push({
+      name: part,
+      fullPath: currentPath,
+    });
+  }
+
+  return segments;
 };
 
 // Apply dark mode class to document
@@ -136,7 +210,21 @@ export const useStore = create<AppStore>((set, get) => ({
   collapsedGroups: new Set(),
   darkMode: loadDarkMode(),
 
-  setFolderPath: (path) => set({ folderPath: path }),
+  // Pinned images initial state
+  pinnedImages: [],
+
+  // Navigation initial state
+  pathSegments: [],
+  siblingFolders: [],
+  sidebarOpen: loadSidebarOpen(),
+  folderViewMode: "images",
+  folderMetadata: null,
+  activeFolderIndex: 0,
+
+  setFolderPath: (path) => {
+    const segments = path ? parsePathSegments(path) : [];
+    set({ folderPath: path, pathSegments: segments });
+  },
 
   setImages: (images) => {
     const { query, groupOrder, collapsedGroups } = get();
@@ -391,6 +479,116 @@ export const useStore = create<AppStore>((set, get) => ({
       selectionAnchorId: fromId,
       activeId: toId
     });
+  },
+
+  // Pin selected images for cross-folder comparison
+  pinSelectedImages: () => {
+    const { filteredImages, selectedIds, pinnedImages, activeId } = get();
+    const existingPaths = new Set(pinnedImages.map((img) => img.path));
+
+    // Get images to pin (selected or active)
+    const idsToPin = selectedIds.size > 0
+      ? Array.from(selectedIds)
+      : activeId ? [activeId] : [];
+
+    const newPinned = filteredImages
+      .filter((img) => idsToPin.includes(img.id) && !existingPaths.has(img.path))
+      .map((img) => ({ ...img })); // Clone to avoid mutations
+
+    set({ pinnedImages: [...pinnedImages, ...newPinned] });
+  },
+
+  unpinImages: (ids) => {
+    const { pinnedImages } = get();
+    const idsSet = new Set(ids);
+    set({ pinnedImages: pinnedImages.filter((img) => !idsSet.has(img.id)) });
+  },
+
+  clearPinnedImages: () => {
+    set({ pinnedImages: [] });
+  },
+
+  togglePinActive: () => {
+    const { filteredImages, activeId, pinnedImages } = get();
+    if (!activeId) return;
+
+    const activeImage = filteredImages.find((img) => img.id === activeId);
+    if (!activeImage) return;
+
+    const isPinned = pinnedImages.some((img) => img.path === activeImage.path);
+
+    if (isPinned) {
+      // Unpin by path (not id, since id includes mtime)
+      set({ pinnedImages: pinnedImages.filter((img) => img.path !== activeImage.path) });
+    } else {
+      // Pin the active image
+      set({ pinnedImages: [...pinnedImages, { ...activeImage }] });
+    }
+  },
+
+  // Navigation actions
+  setPathSegments: (segments) => set({ pathSegments: segments }),
+
+  setSiblingFolders: (folders) => set({ siblingFolders: folders }),
+
+  toggleSidebar: () => {
+    const newOpen = !get().sidebarOpen;
+    saveSidebarOpen(newOpen);
+    set({ sidebarOpen: newOpen });
+  },
+
+  setSidebarOpen: (open) => {
+    saveSidebarOpen(open);
+    set({ sidebarOpen: open });
+  },
+
+  setFolderViewMode: (mode) => set({ folderViewMode: mode }),
+
+  setFolderMetadata: (metadata) => {
+    set({
+      folderMetadata: metadata,
+      siblingFolders: metadata?.sibling_folders || [],
+      folderViewMode: metadata?.has_subfolders ? "overview" : "images",
+      activeFolderIndex: 0,
+    });
+  },
+
+  navigateUp: () => {
+    const { pathSegments } = get();
+    if (pathSegments.length <= 1) return null;
+
+    const parentSegment = pathSegments[pathSegments.length - 2];
+    return parentSegment.fullPath;
+  },
+
+  setActiveFolderIndex: (index) => set({ activeFolderIndex: index }),
+
+  moveFolderActive: (direction) => {
+    const { folderMetadata, activeFolderIndex, containerWidth } = get();
+    if (!folderMetadata || folderMetadata.subfolders.length === 0) return;
+
+    const count = folderMetadata.subfolders.length;
+    const cardWidth = 180 + 16; // Approximate card width + gap
+    const itemsPerRow = Math.max(1, Math.floor(containerWidth / cardWidth));
+
+    let newIndex = activeFolderIndex;
+
+    switch (direction) {
+      case "down":
+        newIndex = Math.min(activeFolderIndex + itemsPerRow, count - 1);
+        break;
+      case "up":
+        newIndex = Math.max(activeFolderIndex - itemsPerRow, 0);
+        break;
+      case "right":
+        newIndex = Math.min(activeFolderIndex + 1, count - 1);
+        break;
+      case "left":
+        newIndex = Math.max(activeFolderIndex - 1, 0);
+        break;
+    }
+
+    set({ activeFolderIndex: newIndex });
   },
 }));
 

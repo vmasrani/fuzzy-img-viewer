@@ -35,7 +35,14 @@ export function Grid() {
     collapsedGroups,
     toggleGroupCollapse,
     setGroupCollapse,
+    pinnedImages,
   } = useStore();
+
+  // Track pinned paths for visual indicator
+  const pinnedPaths = useMemo(
+    () => new Set(pinnedImages.map((img) => img.path)),
+    [pinnedImages]
+  );
 
   const parentRef = useRef<HTMLDivElement>(null);
 
@@ -331,6 +338,7 @@ export function Grid() {
                 const thumbPath = thumbnailMap.get(image.path);
                 const isActive = image.id === activeId;
                 const isSelected = selectedIds.has(image.id);
+                const isPinned = pinnedPaths.has(image.path);
                 const relativePath = getRelativePath(image.path, commonPrefix);
 
                 return (
@@ -338,7 +346,7 @@ export function Grid() {
                     key={image.id}
                     className={`tile ${isActive ? "active" : ""} ${
                       isSelected ? "selected" : ""
-                    }`}
+                    } ${isPinned ? "pinned" : ""}`}
                     style={{
                       width: `${thumbSize}px`,
                       height: `${thumbSize + 56}px`,
@@ -348,6 +356,7 @@ export function Grid() {
                       useStore.setState({ viewMode: "viewer" });
                     }}
                   >
+                    {isPinned && <span className="tile-pinned-badge">pinned</span>}
                     <div className="tile-header">
                       <div className="tile-filename" title={image.path}>
                         {relativePath}

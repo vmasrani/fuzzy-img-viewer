@@ -7,30 +7,16 @@ export interface InitialData {
   images: ImageRecord[] | null;
 }
 
-export interface FolderListResponse {
-  folders: string[];
-}
-
-export interface SubfolderInfo {
+export interface DiscoveredFolder {
   path: string;
   name: string;
   image_count: number;
-  preview_images: string[];
+  depth: number;
 }
 
-export interface SiblingFolderInfo {
-  path: string;
-  name: string;
-  image_count: number;
-}
-
-export interface FolderMetadata {
-  path: string;
-  name: string;
-  subfolders: SubfolderInfo[];
-  sibling_folders: SiblingFolderInfo[];
-  image_count: number;
-  has_subfolders: boolean;
+export interface DiscoverFoldersResponse {
+  root: string;
+  folders: DiscoveredFolder[];
 }
 
 export async function getInitialData(): Promise<InitialData> {
@@ -43,22 +29,11 @@ export async function getInitialData(): Promise<InitialData> {
   return response.json();
 }
 
-export async function listFolders(path: string = ""): Promise<FolderListResponse> {
-  const params = path ? `?path=${encodeURIComponent(path)}` : "";
-  const response = await fetch(`${API_BASE}/folders${params}`);
+export async function discoverFolders(root: string): Promise<DiscoverFoldersResponse> {
+  const response = await fetch(`${API_BASE}/discover-folders?root=${encodeURIComponent(root)}`);
 
   if (!response.ok) {
-    throw new Error(`Failed to list folders: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-export async function getFolderInfo(path: string): Promise<FolderMetadata> {
-  const response = await fetch(`${API_BASE}/folder-info?path=${encodeURIComponent(path)}`);
-
-  if (!response.ok) {
-    throw new Error(`Failed to get folder info: ${response.statusText}`);
+    throw new Error(`Failed to discover folders: ${response.statusText}`);
   }
 
   return response.json();
@@ -102,4 +77,22 @@ export async function ensureThumbnails(
 export function convertFileSrc(filePath: string): string {
   const encodedPath = encodeURIComponent(filePath);
   return `${API_BASE}/image/${encodedPath}`;
+}
+
+export interface FolderListResponse {
+  folders: string[];
+}
+
+export async function listFolders(path?: string): Promise<FolderListResponse> {
+  const url = path
+    ? `${API_BASE}/folders?path=${encodeURIComponent(path)}`
+    : `${API_BASE}/folders`;
+
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Failed to list folders: ${response.statusText}`);
+  }
+
+  return response.json();
 }

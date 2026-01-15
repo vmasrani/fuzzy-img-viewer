@@ -8,7 +8,7 @@ import {
   sortImagesAlphabetically,
 } from "./grouping";
 import { toggleSetItem } from "./utils";
-import { FolderMetadata, SiblingFolderInfo } from "./commands";
+import { DiscoveredFolder } from "./commands";
 
 interface RecentlyViewedItem {
   id: string;
@@ -20,10 +20,9 @@ export interface PathSegment {
   fullPath: string;
 }
 
-type FolderViewMode = "overview" | "images";
-
 interface AppStore {
   folderPath: string | null;
+  rootFolderPath: string | null; // The initial folder - don't navigate above this
   images: ImageRecord[];
   query: string;
   filteredImages: ImageRecord[];
@@ -50,13 +49,14 @@ interface AppStore {
 
   // Navigation state
   pathSegments: PathSegment[];
-  siblingFolders: SiblingFolderInfo[];
-  sidebarOpen: boolean;
-  folderViewMode: FolderViewMode;
-  folderMetadata: FolderMetadata | null;
-  activeFolderIndex: number;
+
+  // All discovered folders (cached at startup)
+  allFolders: DiscoveredFolder[];
+  // Set of folder paths currently selected for viewing
+  selectedFolderPaths: Set<string>;
 
   setFolderPath: (path: string | null) => void;
+  setRootFolderPath: (path: string | null) => void;
   setImages: (images: ImageRecord[]) => void;
   setQuery: (query: string) => void;
   toggleSelection: (id: string) => void;
@@ -93,14 +93,13 @@ interface AppStore {
 
   // Navigation actions
   setPathSegments: (segments: PathSegment[]) => void;
-  setSiblingFolders: (folders: SiblingFolderInfo[]) => void;
-  toggleSidebar: () => void;
-  setSidebarOpen: (open: boolean) => void;
-  setFolderViewMode: (mode: FolderViewMode) => void;
-  setFolderMetadata: (metadata: FolderMetadata | null) => void;
   navigateUp: () => string | null;
-  setActiveFolderIndex: (index: number) => void;
-  moveFolderActive: (direction: "up" | "down" | "left" | "right") => void;
+
+  // Folder discovery and selection
+  setAllFolders: (folders: DiscoveredFolder[]) => void;
+  toggleFolderSelection: (path: string) => void;
+  selectAllFolders: () => void;
+  clearFolderSelection: () => void;
 }
 
 // Load recently viewed from localStorage
@@ -132,25 +131,6 @@ const loadDarkMode = (): boolean => {
     return stored === "true";
   } catch {
     return false;
-  }
-};
-
-// Load sidebar open state from localStorage
-const loadSidebarOpen = (): boolean => {
-  try {
-    const stored = localStorage.getItem("sidebarOpen");
-    return stored === "true";
-  } catch {
-    return false;
-  }
-};
-
-// Save sidebar open state to localStorage
-const saveSidebarOpen = (open: boolean) => {
-  try {
-    localStorage.setItem("sidebarOpen", String(open));
-  } catch {
-    // ignore
   }
 };
 
@@ -189,6 +169,7 @@ const applyDarkMode = (isDark: boolean) => {
 
 export const useStore = create<AppStore>((set, get) => ({
   folderPath: null,
+  rootFolderPath: null,
   images: [],
   query: "",
   filteredImages: [],
@@ -215,27 +196,35 @@ export const useStore = create<AppStore>((set, get) => ({
 
   // Navigation initial state
   pathSegments: [],
-  siblingFolders: [],
-  sidebarOpen: loadSidebarOpen(),
-  folderViewMode: "images",
-  folderMetadata: null,
-  activeFolderIndex: 0,
+
+  // All discovered folders (cached at startup)
+  allFolders: [],
+  // Set of folder paths currently selected for viewing
+  selectedFolderPaths: new Set(),
 
   setFolderPath: (path) => {
     const segments = path ? parsePathSegments(path) : [];
     set({ folderPath: path, pathSegments: segments });
   },
 
+  setRootFolderPath: (path) => set({ rootFolderPath: path }),
+
   setImages: (images) => {
-    const { query, groupOrder, collapsedGroups } = get();
+    const { query, groupOrder, collapsedGroups, selectedFolderPaths } = get();
 
     const alphabetized = sortImagesAlphabetically(images);
     const groups = buildImageGroups(alphabetized);
     const resolvedOrder = ensureGroupOrder(groupOrder, groups);
     const orderedImages = flattenGroupsByOrder(groups, resolvedOrder);
 
+    // Filter by selected folders if any are selected
+    let filtered = orderedImages;
+    if (selectedFolderPaths.size > 0) {
+      filtered = orderedImages.filter(img => selectedFolderPaths.has(img.parent_path));
+    }
+
     // Apply search filtering if there's a query
-    const filteredImages = query ? searchImages(orderedImages, query) : orderedImages;
+    const filteredImages = query ? searchImages(filtered, query) : filtered;
 
     const validCollapsed = new Set(
       Array.from(collapsedGroups).filter((id) => resolvedOrder.includes(id))
@@ -251,8 +240,16 @@ export const useStore = create<AppStore>((set, get) => ({
   },
 
   setQuery: (query) => {
-    const images = get().images;
-    const filteredImages = query ? searchImages(images, query) : images;
+    const { images, selectedFolderPaths } = get();
+
+    // Filter by selected folders if any are selected
+    let filtered = images;
+    if (selectedFolderPaths.size > 0) {
+      filtered = images.filter(img => selectedFolderPaths.has(img.parent_path));
+    }
+
+    // Apply search filtering if there's a query
+    const filteredImages = query ? searchImages(filtered, query) : filtered;
     set({
       query,
       filteredImages,
@@ -529,30 +526,6 @@ export const useStore = create<AppStore>((set, get) => ({
   // Navigation actions
   setPathSegments: (segments) => set({ pathSegments: segments }),
 
-  setSiblingFolders: (folders) => set({ siblingFolders: folders }),
-
-  toggleSidebar: () => {
-    const newOpen = !get().sidebarOpen;
-    saveSidebarOpen(newOpen);
-    set({ sidebarOpen: newOpen });
-  },
-
-  setSidebarOpen: (open) => {
-    saveSidebarOpen(open);
-    set({ sidebarOpen: open });
-  },
-
-  setFolderViewMode: (mode) => set({ folderViewMode: mode }),
-
-  setFolderMetadata: (metadata) => {
-    set({
-      folderMetadata: metadata,
-      siblingFolders: metadata?.sibling_folders || [],
-      folderViewMode: metadata?.has_subfolders ? "overview" : "images",
-      activeFolderIndex: 0,
-    });
-  },
-
   navigateUp: () => {
     const { pathSegments } = get();
     if (pathSegments.length <= 1) return null;
@@ -561,34 +534,57 @@ export const useStore = create<AppStore>((set, get) => ({
     return parentSegment.fullPath;
   },
 
-  setActiveFolderIndex: (index) => set({ activeFolderIndex: index }),
+  // Folder discovery and selection
+  setAllFolders: (folders) => set({ allFolders: folders }),
 
-  moveFolderActive: (direction) => {
-    const { folderMetadata, activeFolderIndex, containerWidth } = get();
-    if (!folderMetadata || folderMetadata.subfolders.length === 0) return;
+  toggleFolderSelection: (path) => {
+    const { selectedFolderPaths, images, query } = get();
+    const newSelected = new Set(selectedFolderPaths);
 
-    const count = folderMetadata.subfolders.length;
-    const cardWidth = 180 + 16; // Approximate card width + gap
-    const itemsPerRow = Math.max(1, Math.floor(containerWidth / cardWidth));
-
-    let newIndex = activeFolderIndex;
-
-    switch (direction) {
-      case "down":
-        newIndex = Math.min(activeFolderIndex + itemsPerRow, count - 1);
-        break;
-      case "up":
-        newIndex = Math.max(activeFolderIndex - itemsPerRow, 0);
-        break;
-      case "right":
-        newIndex = Math.min(activeFolderIndex + 1, count - 1);
-        break;
-      case "left":
-        newIndex = Math.max(activeFolderIndex - 1, 0);
-        break;
+    if (newSelected.has(path)) {
+      newSelected.delete(path);
+    } else {
+      newSelected.add(path);
     }
 
-    set({ activeFolderIndex: newIndex });
+    // Recompute filtered images based on new selection
+    let filtered = images;
+    if (newSelected.size > 0) {
+      filtered = images.filter(img => newSelected.has(img.parent_path));
+    }
+    const filteredImages = query ? searchImages(filtered, query) : filtered;
+
+    set({
+      selectedFolderPaths: newSelected,
+      filteredImages,
+      activeId: filteredImages[0]?.id || null,
+    });
+  },
+
+  selectAllFolders: () => {
+    const { allFolders, images, query } = get();
+    const allPaths = new Set(allFolders.map(f => f.path));
+
+    // When all selected, show all images (filtered only by query)
+    const filteredImages = query ? searchImages(images, query) : images;
+
+    set({
+      selectedFolderPaths: allPaths,
+      filteredImages,
+      activeId: filteredImages[0]?.id || null,
+    });
+  },
+
+  clearFolderSelection: () => {
+    const { images, query } = get();
+    // When cleared, show all images (filtered only by query)
+    const filteredImages = query ? searchImages(images, query) : images;
+
+    set({
+      selectedFolderPaths: new Set(),
+      filteredImages,
+      activeId: filteredImages[0]?.id || null,
+    });
   },
 }));
 

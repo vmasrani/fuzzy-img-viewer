@@ -57,33 +57,22 @@ struct FolderListResponse {
 }
 
 #[derive(Serialize, Clone)]
-struct SubfolderInfo {
+struct DiscoveredFolder {
     path: String,
     name: String,
     image_count: usize,
-    preview_images: Vec<String>,
-}
-
-#[derive(Serialize, Clone)]
-struct SiblingFolderInfo {
-    path: String,
-    name: String,
-    image_count: usize,
+    depth: usize,
 }
 
 #[derive(Serialize)]
-struct FolderInfoResponse {
-    path: String,
-    name: String,
-    subfolders: Vec<SubfolderInfo>,
-    sibling_folders: Vec<SiblingFolderInfo>,
-    image_count: usize,
-    has_subfolders: bool,
+struct DiscoverFoldersResponse {
+    root: String,
+    folders: Vec<DiscoveredFolder>,
 }
 
 #[derive(Deserialize)]
-struct FolderInfoQuery {
-    path: String,
+struct DiscoverFoldersQuery {
+    root: String,
 }
 
 #[derive(Serialize)]
@@ -148,105 +137,64 @@ fn count_images_in_dir(path: &Path) -> usize {
         .unwrap_or(0)
 }
 
-// Get first N image paths from a directory (non-recursive)
-fn get_preview_images(path: &Path, count: usize) -> Vec<String> {
-    std::fs::read_dir(path)
-        .map(|entries| {
-            let mut images: Vec<_> = entries
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file() && is_image_file(&e.path()))
-                .map(|e| e.path().to_string_lossy().to_string())
-                .collect();
-            images.sort();
-            images.into_iter().take(count).collect()
-        })
-        .unwrap_or_default()
-}
+// Discover ALL folders under a root path recursively
+async fn discover_folders(Query(params): Query<DiscoverFoldersQuery>) -> Result<Json<DiscoverFoldersResponse>, StatusCode> {
+    let root = PathBuf::from(&params.root);
 
-// Get folder info including subfolders and siblings
-async fn get_folder_info(Query(params): Query<FolderInfoQuery>) -> Result<Json<FolderInfoResponse>, StatusCode> {
-    let path = PathBuf::from(&params.path);
-
-    if !path.exists() || !path.is_dir() {
+    if !root.exists() || !root.is_dir() {
         return Err(StatusCode::NOT_FOUND);
     }
 
+    let root_str = params.root.clone();
+
     let result = tokio::task::spawn_blocking(move || {
-        let folder_name = path
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("")
-            .to_string();
+        let mut folders = Vec::new();
 
-        // Get immediate subfolders with metadata
-        let mut subfolders: Vec<SubfolderInfo> = Vec::new();
-        if let Ok(entries) = std::fs::read_dir(&path) {
-            for entry in entries.filter_map(|e| e.ok()) {
-                let entry_path = entry.path();
-                if entry_path.is_dir() {
-                    let subfolder_name = entry_path
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("")
-                        .to_string();
+        // Use WalkBuilder to recursively find all directories
+        let walker = WalkBuilder::new(&root)
+            .max_depth(Some(MAX_SCAN_DEPTH))
+            .follow_links(false)
+            .git_ignore(false)
+            .hidden(true)  // Skip hidden directories
+            .build();
 
-                    // Skip hidden folders
-                    if subfolder_name.starts_with('.') {
-                        continue;
-                    }
-
-                    let image_count = count_images_in_dir(&entry_path);
-                    let preview_images = get_preview_images(&entry_path, 4);
-
-                    subfolders.push(SubfolderInfo {
-                        path: entry_path.to_string_lossy().to_string(),
-                        name: subfolder_name,
-                        image_count,
-                        preview_images,
-                    });
-                }
+        for entry in walker.filter_map(|e| e.ok()) {
+            let entry_path = entry.path();
+            if !entry_path.is_dir() {
+                continue;
             }
-        }
-        subfolders.sort_by(|a, b| a.name.cmp(&b.name));
 
-        // Get sibling folders (other folders in parent directory) with image counts
-        let mut sibling_folders: Vec<SiblingFolderInfo> = Vec::new();
-        if let Some(parent) = path.parent() {
-            if let Ok(entries) = std::fs::read_dir(parent) {
-                for entry in entries.filter_map(|e| e.ok()) {
-                    let entry_path = entry.path();
-                    if entry_path.is_dir() && entry_path != path {
-                        let name = entry_path
-                            .file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("")
-                            .to_string();
+            let name = entry_path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .unwrap_or("")
+                .to_string();
 
-                        // Skip hidden folders
-                        if !name.starts_with('.') {
-                            let image_count = count_images_in_dir(&entry_path);
-                            sibling_folders.push(SiblingFolderInfo {
-                                path: entry_path.to_string_lossy().to_string(),
-                                name,
-                                image_count,
-                            });
-                        }
-                    }
-                }
+            // Skip hidden folders (except root itself)
+            if name.starts_with('.') && entry_path != root {
+                continue;
             }
+
+            let image_count = count_images_in_dir(entry_path);
+            let depth = entry_path
+                .strip_prefix(&root)
+                .map(|p| p.components().count())
+                .unwrap_or(0);
+
+            folders.push(DiscoveredFolder {
+                path: entry_path.to_string_lossy().to_string(),
+                name,
+                image_count,
+                depth,
+            });
         }
-        sibling_folders.sort_by(|a, b| a.name.cmp(&b.name));
 
-        // Count images in current folder (non-recursive)
-        let image_count = count_images_in_dir(&path);
+        // Sort by path for consistent ordering
+        folders.sort_by(|a, b| a.path.cmp(&b.path));
 
-        FolderInfoResponse {
-            path: path.to_string_lossy().to_string(),
-            name: folder_name,
-            subfolders: subfolders.clone(),
-            sibling_folders,
-            image_count,
-            has_subfolders: !subfolders.is_empty(),
+        DiscoverFoldersResponse {
+            root: root_str,
+            folders,
         }
     })
     .await
@@ -465,7 +413,7 @@ async fn main() {
     let mut app = Router::new()
         .route("/api/initial", get(get_initial_data))
         .route("/api/folders", get(list_folders))
-        .route("/api/folder-info", get(get_folder_info))
+        .route("/api/discover-folders", get(discover_folders))
         .route("/api/scan", post(scan_folder))
         .route("/api/thumbnails", post(ensure_thumbnails))
         .route("/api/image/*path", get(serve_image))

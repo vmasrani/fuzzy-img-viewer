@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useStore } from "./store";
-import { scanFolder, getInitialData, getFolderInfo } from "./commands";
-import { normalizePath } from "./utils";
+import { scanFolder, getInitialData, discoverFolders } from "./commands";
 import { SearchBar } from "./components/SearchBar";
 import { Grid } from "./components/Grid";
 import { Viewer } from "./components/Viewer";
@@ -11,9 +10,7 @@ import { QuickLook } from "./components/QuickLook";
 import { CommandPalette } from "./components/CommandPalette";
 import { KeyboardHelp } from "./components/KeyboardHelp";
 import { Breadcrumb } from "./components/Breadcrumb";
-import { SiblingTabs } from "./components/SiblingTabs";
-import { FolderOverview } from "./components/FolderOverview";
-import { FolderSidebar } from "./components/FolderSidebar";
+import { FolderPills } from "./components/FolderPills";
 
 function KeybindingsHelp() {
   return (
@@ -57,7 +54,9 @@ function KeybindingsHelp() {
 export default function App() {
   const {
     folderPath,
+    rootFolderPath,
     setFolderPath,
+    setRootFolderPath,
     setImages,
     viewMode,
     setViewMode,
@@ -80,17 +79,11 @@ export default function App() {
     setQuicklookIndex,
     // Navigation state
     pathSegments,
-    siblingFolders,
-    sidebarOpen,
-    folderViewMode,
-    folderMetadata,
-    activeFolderIndex,
-    // Navigation actions
-    toggleSidebar,
-    setFolderViewMode,
-    setFolderMetadata,
-    navigateUp,
-    moveFolderActive,
+    // Folder discovery and selection
+    allFolders,
+    selectedFolderPaths,
+    setAllFolders,
+    toggleFolderSelection,
     // Pinned images
     pinnedImages,
     pinSelectedImages,
@@ -101,25 +94,16 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showFolderBrowser, setShowFolderBrowser] = useState(false);
 
-  // Navigate to a folder path
+  // Navigate to a folder path (just scan images - folder discovery is done at startup)
   const navigateToFolder = useCallback(async (path: string) => {
     try {
-      // Set the folder path (also updates path segments)
       setFolderPath(path);
-
-      // Get folder metadata
-      const metadata = await getFolderInfo(path);
-      setFolderMetadata(metadata);
-
-      // If there are no subfolders or user bypasses overview, scan images
-      if (!metadata.has_subfolders) {
-        const images = await scanFolder(path);
-        setImages(images);
-      }
+      const images = await scanFolder(path);
+      setImages(images);
     } catch (error) {
       console.error("Failed to navigate to folder:", error);
     }
-  }, [setFolderPath, setFolderMetadata, setImages]);
+  }, [setFolderPath, setImages]);
 
   // Fetch initial data on mount
   useEffect(() => {
@@ -128,14 +112,15 @@ export default function App() {
         const data = await getInitialData();
         if (data.folder_path && data.images) {
           setFolderPath(data.folder_path);
+          setRootFolderPath(data.folder_path);
           setImages(data.images);
 
-          // Also load folder metadata
+          // Discover ALL folders under root (cached for folder pills)
           try {
-            const metadata = await getFolderInfo(data.folder_path);
-            setFolderMetadata(metadata);
-          } catch {
-            // Ignore - metadata is optional
+            const discovered = await discoverFolders(data.folder_path);
+            setAllFolders(discovered.folders);
+          } catch (err) {
+            console.error("Failed to discover folders:", err);
           }
         }
       } catch (error) {
@@ -146,7 +131,7 @@ export default function App() {
     };
 
     loadInitialData();
-  }, [setFolderPath, setImages, setFolderMetadata]);
+  }, [setFolderPath, setRootFolderPath, setImages, setAllFolders]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -209,8 +194,6 @@ export default function App() {
           e.preventDefault();
           if (viewMode === "quicklook") {
             moveQuicklook("prev");
-          } else if (viewMode === "grid" && folderViewMode === "overview") {
-            moveFolderActive("up");
           } else if (viewMode === "grid") {
             moveActive("up", e.shiftKey);
           }
@@ -220,8 +203,6 @@ export default function App() {
           e.preventDefault();
           if (viewMode === "quicklook") {
             moveQuicklook("next");
-          } else if (viewMode === "grid" && folderViewMode === "overview") {
-            moveFolderActive("down");
           } else if (viewMode === "grid") {
             moveActive("down", e.shiftKey);
           }
@@ -231,8 +212,6 @@ export default function App() {
           e.preventDefault();
           if (viewMode === "quicklook") {
             moveQuicklook("prev");
-          } else if (viewMode === "grid" && folderViewMode === "overview") {
-            moveFolderActive("left");
           } else if (viewMode === "grid") {
             moveActive("left", e.shiftKey);
           }
@@ -242,8 +221,6 @@ export default function App() {
           e.preventDefault();
           if (viewMode === "quicklook") {
             moveQuicklook("next");
-          } else if (viewMode === "grid" && folderViewMode === "overview") {
-            moveFolderActive("right");
           } else if (viewMode === "grid") {
             moveActive("right", e.shiftKey);
           }
@@ -251,86 +228,10 @@ export default function App() {
 
         case "Enter":
           if (viewMode === "grid") {
-            if (folderViewMode === "overview" && folderMetadata) {
-              // In folder overview, enter selected folder
-              const selectedFolder = folderMetadata.subfolders[activeFolderIndex];
-              if (selectedFolder) {
-                navigateToFolder(selectedFolder.path);
-              }
-            } else if (selectedIds.size > 1) {
+            if (selectedIds.size > 1) {
               setViewMode("compare");
             } else if (activeId) {
               setViewMode("viewer");
-            }
-          }
-          break;
-
-        case "Backspace":
-          // Navigate up one level
-          if (!isMeta && viewMode === "grid") {
-            const parentPath = navigateUp();
-            if (parentPath) {
-              navigateToFolder(parentPath);
-            }
-          }
-          break;
-
-        case "b":
-        case "B":
-          // Toggle sidebar
-          if (!isMeta) {
-            toggleSidebar();
-          }
-          break;
-
-        case "[":
-          // Previous sibling folder (only folders with images)
-          if (!isMeta && siblingFolders.length > 0 && folderPath) {
-            const normalizedCurrent = normalizePath(folderPath);
-            const seen = new Set<string>();
-            const allFolders: string[] = [];
-            // Only include siblings with images
-            for (const s of siblingFolders) {
-              const n = normalizePath(s.path);
-              if (n && !seen.has(n) && s.image_count > 0) {
-                seen.add(n);
-                allFolders.push(n);
-              }
-            }
-            // Always include current folder
-            if (normalizedCurrent && !seen.has(normalizedCurrent)) {
-              allFolders.push(normalizedCurrent);
-            }
-            allFolders.sort();
-            const currentIndex = allFolders.indexOf(normalizedCurrent);
-            if (currentIndex > 0) {
-              navigateToFolder(allFolders[currentIndex - 1]);
-            }
-          }
-          break;
-
-        case "]":
-          // Next sibling folder (only folders with images)
-          if (!isMeta && siblingFolders.length > 0 && folderPath) {
-            const normalizedCurrent = normalizePath(folderPath);
-            const seen = new Set<string>();
-            const allFolders: string[] = [];
-            // Only include siblings with images
-            for (const s of siblingFolders) {
-              const n = normalizePath(s.path);
-              if (n && !seen.has(n) && s.image_count > 0) {
-                seen.add(n);
-                allFolders.push(n);
-              }
-            }
-            // Always include current folder
-            if (normalizedCurrent && !seen.has(normalizedCurrent)) {
-              allFolders.push(normalizedCurrent);
-            }
-            allFolders.sort();
-            const currentIndex = allFolders.indexOf(normalizedCurrent);
-            if (currentIndex < allFolders.length - 1) {
-              navigateToFolder(allFolders[currentIndex + 1]);
             }
           }
           break;
@@ -362,7 +263,6 @@ export default function App() {
           }
           break;
 
-
         case "g":
           if (!isMeta) {
             setViewMode("grid");
@@ -388,7 +288,7 @@ export default function App() {
         case "p":
         case "P":
           // Pin/unpin active image for cross-folder comparison
-          if (!isMeta && viewMode === "grid" && folderViewMode === "images") {
+          if (!isMeta && viewMode === "grid") {
             e.preventDefault();
             if (e.shiftKey) {
               // Shift+P: Pin all selected images
@@ -442,16 +342,6 @@ export default function App() {
     infoPanelOpen,
     setInfoPanelOpen,
     setQuicklookIndex,
-    // Navigation deps
-    folderViewMode,
-    folderMetadata,
-    activeFolderIndex,
-    folderPath,
-    siblingFolders,
-    toggleSidebar,
-    navigateUp,
-    moveFolderActive,
-    navigateToFolder,
     // Pin actions
     pinnedImages,
     pinSelectedImages,
@@ -462,14 +352,6 @@ export default function App() {
   const handleSelectFolder = async (path: string) => {
     setShowFolderBrowser(false);
     await navigateToFolder(path);
-  };
-
-  // Handler for viewing all images in folder overview
-  const handleViewAllImages = async () => {
-    if (!folderPath) return;
-    setFolderViewMode("images");
-    const images = await scanFolder(folderPath);
-    setImages(images);
   };
 
   if (isLoading) {
@@ -510,7 +392,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app ${sidebarOpen ? "with-sidebar" : ""}`}>
+    <div className="app">
       <div className="app-header">
         <div className="app-header-top">
           <SearchBar />
@@ -528,33 +410,16 @@ export default function App() {
             </div>
           )}
         </div>
-        <Breadcrumb segments={pathSegments} onNavigate={navigateToFolder} />
-        <SiblingTabs
-          siblings={siblingFolders}
-          currentPath={folderPath || ""}
-          currentImageCount={folderMetadata?.image_count || filteredImages.length}
-          onSelect={navigateToFolder}
+        <Breadcrumb segments={pathSegments} rootPath={rootFolderPath || ""} onNavigate={navigateToFolder} />
+        <FolderPills
+          folders={allFolders}
+          selectedPaths={selectedFolderPaths}
+          onToggle={toggleFolderSelection}
           showOnlyWithImages={true}
         />
       </div>
-      <div className="main-layout">
-        <FolderSidebar
-          rootPath={pathSegments[0]?.fullPath || "/"}
-          currentPath={folderPath || ""}
-          isOpen={sidebarOpen}
-          onNavigate={navigateToFolder}
-          onToggle={toggleSidebar}
-        />
-        <div className="main-content">
-          {folderViewMode === "overview" ? (
-            <FolderOverview
-              onFolderSelect={navigateToFolder}
-              onViewAllImages={handleViewAllImages}
-            />
-          ) : (
-            <Grid />
-          )}
-        </div>
+      <div className="main-content">
+        <Grid />
       </div>
       {viewMode === "viewer" && <Viewer />}
       {viewMode === "compare" && <Compare />}

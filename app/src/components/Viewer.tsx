@@ -45,7 +45,17 @@ export function Viewer() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "i") {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (activeIndex > 0) {
+          setActiveId(filteredImages[activeIndex - 1].id);
+        }
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (activeIndex < filteredImages.length - 1) {
+          setActiveId(filteredImages[activeIndex + 1].id);
+        }
+      } else if (e.key === "i") {
         setInfoPanelOpen((prev) => !prev);
       } else if (e.key === "0") {
         setZoom(1);
@@ -59,7 +69,7 @@ export function Viewer() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [activeIndex, filteredImages, setActiveId, setInfoPanelOpen, setZoom, setPan]);
 
   const handlePrev = useCallback(() => {
     if (activeIndex > 0) {

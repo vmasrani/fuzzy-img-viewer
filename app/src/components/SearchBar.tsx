@@ -48,7 +48,13 @@ export function SearchBar() {
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!isDropdownOpen) return;
+    // If dropdown closed, blur on arrow keys to allow grid navigation
+    if (!isDropdownOpen) {
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+        inputRef.current?.blur();
+      }
+      return;
+    }
 
     switch (e.key) {
       case "ArrowDown":

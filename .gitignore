@@ -1,4 +1,5 @@
 # PNG folder and zip files (as specified)
+contour-plots-enhanced/
 pngs/
 *.zip
 *.tgz
